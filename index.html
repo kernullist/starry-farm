@@ -1189,7 +1189,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '1.2';
+var GAME_VER = '1.3';
 
 // ---------- core constants ----------
 
@@ -1577,41 +1577,41 @@ I('coffee', '커피', 'cook', 150, 'bottle', ['#5a3a20', '#2a1a08', '#8a6a48'], 
 // trellis: blocks movement.
 
 var CROPS = {
-    parsnip_seeds: { crop: 'parsnip', season: 'spring', days: 4, regrow: 0, yield: 1 },
-    bean_seeds: { crop: 'green_bean', season: 'spring', days: 10, regrow: 3, yield: 1, trellis: true },
-    garlic_seeds: { crop: 'garlic', season: 'spring', days: 4, regrow: 0, yield: 1 },
-    kale_seeds: { crop: 'kale', season: 'spring', days: 6, regrow: 0, yield: 1 },
-    potato_seeds: { crop: 'potato', season: 'spring', days: 6, regrow: 0, yield: 1, extraChance: .25 },
-    cauliflower_seeds: { crop: 'cauliflower', season: 'spring', days: 12, regrow: 0, yield: 1, giant: true },
-    strawberry_seeds: { crop: 'strawberry', season: 'spring', days: 8, regrow: 4, yield: 1 },
-    tulip_seeds: { crop: 'tulip', season: 'spring', days: 6, regrow: 0, yield: 1, flower: true },
-    jazz_seeds: { crop: 'jazz', season: 'spring', days: 7, regrow: 0, yield: 1, flower: true },
-    rhubarb_seeds: { crop: 'rhubarb', season: 'spring', days: 13, regrow: 0, yield: 1 },
+    parsnip_seeds: { crop: 'parsnip', season: 'spring', form: 'root', days: 4, regrow: 0, yield: 1 },
+    bean_seeds: { crop: 'green_bean', season: 'spring', form: 'vine', days: 10, regrow: 3, yield: 1, trellis: true },
+    garlic_seeds: { crop: 'garlic', season: 'spring', form: 'root', days: 4, regrow: 0, yield: 1 },
+    kale_seeds: { crop: 'kale', season: 'spring', form: 'leafy', days: 6, regrow: 0, yield: 1 },
+    potato_seeds: { crop: 'potato', season: 'spring', form: 'sprawl', days: 6, regrow: 0, yield: 1, extraChance: .25 },
+    cauliflower_seeds: { crop: 'cauliflower', season: 'spring', form: 'leafy', days: 12, regrow: 0, yield: 1, giant: true },
+    strawberry_seeds: { crop: 'strawberry', season: 'spring', form: 'bush', days: 8, regrow: 4, yield: 1 },
+    tulip_seeds: { crop: 'tulip', season: 'spring', form: 'flower', days: 6, regrow: 0, yield: 1, flower: true },
+    jazz_seeds: { crop: 'jazz', season: 'spring', form: 'flower', days: 7, regrow: 0, yield: 1, flower: true },
+    rhubarb_seeds: { crop: 'rhubarb', season: 'spring', form: 'stalk', days: 13, regrow: 0, yield: 1 },
 
-    wheat_seeds: { crop: 'wheat', season: 'summer,fall', days: 4, regrow: 0, yield: 1, scythe: true },
-    radish_seeds: { crop: 'radish', season: 'summer', days: 6, regrow: 0, yield: 1 },
-    pepper_seeds: { crop: 'hot_pepper', season: 'summer', days: 5, regrow: 3, yield: 1, trellis: false },
-    corn_seeds: { crop: 'corn', season: 'summer,fall', days: 14, regrow: 4, yield: 1 },
-    tomato_seeds: { crop: 'tomato', season: 'summer', days: 11, regrow: 4, yield: 1 },
-    melon_seeds: { crop: 'melon', season: 'summer', days: 12, regrow: 0, yield: 1, giant: true },
-    hops_seeds: { crop: 'hops', season: 'summer', days: 11, regrow: 1, yield: 1, trellis: true },
-    blueberry_seeds: { crop: 'blueberry', season: 'summer', days: 13, regrow: 4, yield: 3 },
-    poppy_seeds: { crop: 'poppy', season: 'summer', days: 7, regrow: 0, yield: 1, flower: true },
-    spangle_seeds: { crop: 'spangle', season: 'summer', days: 8, regrow: 0, yield: 1, flower: true },
-    redcabbage_seeds: { crop: 'red_cabbage', season: 'summer', days: 9, regrow: 0, yield: 1, year2: true },
-    starfruit_seeds: { crop: 'starfruit', season: 'summer', days: 13, regrow: 0, yield: 1 },
+    wheat_seeds: { crop: 'wheat', season: 'summer,fall', form: 'stalk', days: 4, regrow: 0, yield: 1, scythe: true },
+    radish_seeds: { crop: 'radish', season: 'summer', form: 'root', days: 6, regrow: 0, yield: 1 },
+    pepper_seeds: { crop: 'hot_pepper', season: 'summer', form: 'bush', days: 5, regrow: 3, yield: 1, trellis: false },
+    corn_seeds: { crop: 'corn', season: 'summer,fall', form: 'stalk', days: 14, regrow: 4, yield: 1 },
+    tomato_seeds: { crop: 'tomato', season: 'summer', form: 'bush', days: 11, regrow: 4, yield: 1 },
+    melon_seeds: { crop: 'melon', season: 'summer', form: 'sprawl', days: 12, regrow: 0, yield: 1, giant: true },
+    hops_seeds: { crop: 'hops', season: 'summer', form: 'vine', days: 11, regrow: 1, yield: 1, trellis: true },
+    blueberry_seeds: { crop: 'blueberry', season: 'summer', form: 'bush', days: 13, regrow: 4, yield: 3 },
+    poppy_seeds: { crop: 'poppy', season: 'summer', form: 'flower', days: 7, regrow: 0, yield: 1, flower: true },
+    spangle_seeds: { crop: 'spangle', season: 'summer', form: 'flower', days: 8, regrow: 0, yield: 1, flower: true },
+    redcabbage_seeds: { crop: 'red_cabbage', season: 'summer', form: 'leafy', days: 9, regrow: 0, yield: 1, year2: true },
+    starfruit_seeds: { crop: 'starfruit', season: 'summer', form: 'stalk', days: 13, regrow: 0, yield: 1 },
 
-    bokchoy_seeds: { crop: 'bok_choy', season: 'fall', days: 4, regrow: 0, yield: 1 },
-    eggplant_seeds: { crop: 'eggplant', season: 'fall', days: 5, regrow: 5, yield: 1 },
-    yam_seeds: { crop: 'yam', season: 'fall', days: 10, regrow: 0, yield: 1 },
-    amaranth_seeds: { crop: 'amaranth', season: 'fall', days: 7, regrow: 0, yield: 1, scythe: true },
-    grape_seeds: { crop: 'grape', season: 'fall', days: 10, regrow: 3, yield: 1, trellis: true },
-    artichoke_seeds: { crop: 'artichoke', season: 'fall', days: 8, regrow: 0, yield: 1, year2: true },
-    pumpkin_seeds: { crop: 'pumpkin', season: 'fall', days: 13, regrow: 0, yield: 1, giant: true },
-    cranberry_seeds: { crop: 'cranberry', season: 'fall', days: 7, regrow: 5, yield: 2 },
-    sunflower_seeds: { crop: 'sunflower', season: 'summer,fall', days: 8, regrow: 0, yield: 1, flower: true },
-    fairy_seeds: { crop: 'fairy_rose', season: 'fall', days: 12, regrow: 0, yield: 1, flower: true },
-    beet_seeds: { crop: 'beet', season: 'fall', days: 6, regrow: 0, yield: 1 }
+    bokchoy_seeds: { crop: 'bok_choy', season: 'fall', form: 'leafy', days: 4, regrow: 0, yield: 1 },
+    eggplant_seeds: { crop: 'eggplant', season: 'fall', form: 'bush', days: 5, regrow: 5, yield: 1 },
+    yam_seeds: { crop: 'yam', season: 'fall', form: 'root', days: 10, regrow: 0, yield: 1 },
+    amaranth_seeds: { crop: 'amaranth', season: 'fall', form: 'stalk', days: 7, regrow: 0, yield: 1, scythe: true },
+    grape_seeds: { crop: 'grape', season: 'fall', form: 'vine', days: 10, regrow: 3, yield: 1, trellis: true },
+    artichoke_seeds: { crop: 'artichoke', season: 'fall', form: 'leafy', days: 8, regrow: 0, yield: 1, year2: true },
+    pumpkin_seeds: { crop: 'pumpkin', season: 'fall', form: 'sprawl', days: 13, regrow: 0, yield: 1, giant: true },
+    cranberry_seeds: { crop: 'cranberry', season: 'fall', form: 'bush', days: 7, regrow: 5, yield: 2 },
+    sunflower_seeds: { crop: 'sunflower', season: 'summer,fall', form: 'stalk', days: 8, regrow: 0, yield: 1, flower: true },
+    fairy_seeds: { crop: 'fairy_rose', season: 'fall', form: 'flower', days: 12, regrow: 0, yield: 1, flower: true },
+    beet_seeds: { crop: 'beet', season: 'fall', form: 'root', days: 6, regrow: 0, yield: 1 }
 };
 
 // seeds that can come out of the "mixed seeds" wild drop, per season
@@ -2755,8 +2755,16 @@ function drawPerson(g, o, dir, frame)
     var shoe = o.shoe || '#4a2a12';
     var eye = o.eye || '#33241a';
 
+    // frames 0-3 are the walk cycle; 4-6 are tool poses (wind up / strike / recover)
+    var act = frame >= 4 ? (frame - 4) : -1;
     var step = (frame === 1) ? 1 : ((frame === 3) ? -1 : 0);
     var bob = (frame === 1 || frame === 3) ? -1 : 0;
+    if (act >= 0)
+    {
+        step = 0;
+        bob = act === 1 ? 1 : 0;      // drop into the strike
+    }
+    var lean = act === 1 ? 1 : (act === 0 ? -1 : 0);
 
     contactShadow(g, 16, 50, 9, 3);
 
@@ -2767,6 +2775,12 @@ function drawPerson(g, o, dir, frame)
     var lx = 10, rx = 17;
     var lLen = 12 + (step > 0 ? -2 : 0);
     var rLen = 12 + (step < 0 ? -2 : 0);
+    if (act >= 0)
+    {
+        // braced stance: feet wider apart
+        lx = 8;
+        rx = 19;
+    }
     pr(g, lx, legTop, 5, lLen, pants);
     pr(g, rx, legTop, 5, rLen, pants);
     pr(g, lx, legTop, 1, lLen, tone(pants, 1));
@@ -2785,9 +2799,10 @@ function drawPerson(g, o, dir, frame)
 
     // ---- torso (y 21..36) ----
     var ty = 21 + bob;
-    pr(g, 10, ty, 12, 1, shirt);
-    pr(g, 9, ty + 1, 14, 1, shirt);
-    pr(g, 8, ty + 2, 16, 13, shirt);
+    var tl = (act >= 0 && dir === 2) ? lean : 0;   // sideways lean reads best in profile
+    pr(g, 10 + tl, ty, 12, 1, shirt);
+    pr(g, 9 + tl, ty + 1, 14, 1, shirt);
+    pr(g, 8 + tl, ty + 2, 16, 13, shirt);
     pr(g, 8, ty + 2, 3, 13, tone(shirt, .9));         // lit side
     pr(g, 21, ty + 2, 3, 13, tone(shirt, -1.2));      // shaded side
     pr(g, 10, ty, 12, 1, tone(shirt, 1.5));           // shoulder highlight
@@ -2808,7 +2823,33 @@ function drawPerson(g, o, dir, frame)
 
     // ---- arms ----
     var swing = step * 2;
-    if (dir === 2)
+    if (act >= 0)
+    {
+        // both hands together, tracking an overhead arc
+        var ax = [0, 4, 2][act], ay = [-13, 4, -2][act];
+        if (dir === 2)
+        {
+            ax = [4, 12, 8][act];
+            ay = [-13, 2, -5][act];
+        }
+        if (dir === 1)
+        {
+            ay = [-15, -6, -10][act];
+        }
+        // upper arm from the shoulder to the hands
+        pr(g, 12 + ax * .5, ty + 3, 4, Math.max(3, 9 + ay * .35), shirt);
+        pr(g, 16 + ax * .5, ty + 3, 4, Math.max(3, 9 + ay * .35), shirt);
+        pr(g, 12 + ax * .5, ty + 3, 1, Math.max(3, 9 + ay * .35), tone(shirt, 1));
+        // forearms reaching to the grip
+        pr(g, 12 + ax, ty + 6 + ay * .5, 4, 6, shirt);
+        pr(g, 16 + ax, ty + 6 + ay * .5, 4, 6, shirt);
+        pr(g, 12 + ax, ty + 11 + ay * .5, 8, 2, tone(shirt, -1.8));
+        // hands
+        pr(g, 12 + ax, ty + 13 + ay * .5, 8, 4, skin);
+        pr(g, 12 + ax, ty + 16 + ay * .5, 8, 1, tone(skin, -1.5));
+        pr(g, 15 + ax, ty + 13 + ay * .5, 1, 4, tone(skin, -1.2));
+    }
+    else if (dir === 2)
     {
         pr(g, 12, ty + 3 + swing, 5, 9, shirt);
         pr(g, 12, ty + 3 + swing, 1, 9, tone(shirt, 1));
@@ -2832,6 +2873,7 @@ function drawPerson(g, o, dir, frame)
 
     // ---- head (y 6..21), 15 rows, tapering to a chin ----
     var hy = 6 + bob;
+    var hl = (act >= 0 && dir === 2) ? lean : 0;
     var spans = [
         [10, 12], [9, 14],
         [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16],
@@ -2845,7 +2887,7 @@ function drawPerson(g, o, dir, frame)
     pr(g, 24, hy + 8, 1, 2, tone(skin, -1.8));
     for (r = 0; r < spans.length; r++)
     {
-        pr(g, spans[r][0], hy + r, spans[r][1], 1, skin);
+        pr(g, spans[r][0] + hl, hy + r, spans[r][1], 1, skin);
     }
     // form shading
     for (r = 0; r < spans.length; r++)
@@ -3249,28 +3291,61 @@ function tileStoneFloor(variant)
     });
 }
 
-function tileWoodFloor()
+function tileWoodFloor(variant)
 {
-    return bake('t:wfloor', TILE, TILE, function (g)
+    variant = variant || 0;
+    return bake('t:wfloor:' + variant, TILE, TILE, function (g)
     {
-        var base = '#9a6a3c';
+        // lighter and warmer than the walls so a wooden room is not one brown mass
+        var base = '#b07f4a';
         pr(g, 0, 0, TILE, TILE, base);
-        var y;
+        var y, row = 0;
         for (y = 0; y < TILE; y += 8)
         {
-            pr(g, 0, y, TILE, 7, y % 16 === 0 ? tone(base, .4) : tone(base, -.35));
-            pr(g, 0, y, TILE, 1, tone(base, 1.2));
-            pr(g, 0, y + 7, TILE, 1, tone(base, -2));
+            var c = tone(base, ((row + variant) % 3 === 0) ? .55 : (((row + variant) % 3 === 1) ? -.35 : .1));
+            pr(g, 0, y, TILE, 7, c);
+            pr(g, 0, y, TILE, 1, tone(c, 1.5));
+            pr(g, 0, y + 6, TILE, 2, tone(c, -1.9));
             // grain
-            pr(g, 4, y + 3, 9, 1, tone(base, -.9));
-            pr(g, 18, y + 4, 11, 1, tone(base, -.9));
-            pr(g, 8, y + 5, 6, 1, tone(base, .8));
+            pr(g, 3 + ((row * 7 + variant * 3) % 12), y + 2, 11, 1, tone(c, -.9));
+            pr(g, 17 + ((row * 5 + variant) % 10), y + 4, 9, 1, tone(c, -.9));
+            pr(g, 7, y + 3, 6, 1, tone(c, .9));
+            row++;
         }
-        // plank ends
-        pr(g, 11, 0, 1, 8, tone(base, -2.2));
-        pr(g, 23, 8, 1, 8, tone(base, -2.2));
-        pr(g, 6, 16, 1, 8, tone(base, -2.2));
-        pr(g, 26, 24, 1, 8, tone(base, -2.2));
+        // plank end joints, offset per row
+        var ends = [11, 23, 6, 26];
+        for (y = 0; y < 4; y++)
+        {
+            var ex = (ends[(y + variant) % 4] + variant * 5) % TILE;
+            pr(g, ex, y * 8, 1, 7, tone(base, -2.3));
+            pr(g, ex + 1, y * 8, 1, 7, tone(base, 1));
+        }
+    });
+}
+
+function tileCarpet(variant)
+{
+    variant = variant || 0;
+    return bake('t:carpet:' + variant, TILE, TILE, function (g)
+    {
+        var base = '#6a4a8a';
+        pr(g, 0, 0, TILE, TILE, base);
+        dither(g, 0, 0, TILE, TILE, base, tone(base, -.6), .4);
+        // woven pile: short diagonal strokes, not noise
+        var i;
+        for (i = 0; i < 22; i++)
+        {
+            var x = Math.floor(hash2(i, variant, 83) * TILE);
+            var y = Math.floor(hash2(variant, i, 89) * TILE);
+            pr(g, x, y, 2, 1, tone(base, i % 3 === 0 ? 1.1 : -1));
+            pr(g, x + 1, y + 1, 1, 1, tone(base, .5));
+        }
+        // faint damask lattice
+        for (i = 0; i < TILE; i += 8)
+        {
+            pr(g, i + (variant % 2) * 4, 0, 1, TILE, tone(base, .7));
+            pr(g, 0, i + (variant % 2) * 4, TILE, 1, tone(base, .7));
+        }
     });
 }
 
@@ -3375,6 +3450,119 @@ function tileSnowIce()
         pr(g, 18, 19, 10, 1, '#eaf5fc');
         pr(g, 10, 24, 9, 1, tone(base, -1.2));
         pr(g, 22, 9, 6, 1, tone(base, -1.2));
+    });
+}
+
+
+// ---------- interior walls ----------
+// Interiors were flat colour blocks. Each room now gets a papered wall with a
+// pattern, a lit top rail and a skirting board where it meets the floor.
+
+function tileWall(col, paper, variant, bottom)
+{
+    return bake('t:wall:' + col + ':' + paper + ':' + variant + ':' + (bottom ? 1 : 0), TILE, TILE, function (g)
+    {
+        pr(g, 0, 0, TILE, TILE, col);
+        pr(g, 0, 0, TILE, 2, tone(col, 1.4));
+        var i, j;
+        if (paper === 'stripe')
+        {
+            for (i = 2; i < TILE; i += 6)
+            {
+                pr(g, i, 0, 2, TILE, tone(col, -.7));
+                pr(g, i + 2, 0, 1, TILE, tone(col, .6));
+            }
+        }
+        else if (paper === 'floral')
+        {
+            for (j = 0; j < 2; j++)
+            {
+                for (i = 0; i < 2; i++)
+                {
+                    var fx = 8 + i * 16 + (j % 2) * 8, fy = 8 + j * 16;
+                    var k;
+                    for (k = 0; k < 4; k++)
+                    {
+                        var a = k * 1.571;
+                        pr(g, fx + Math.round(Math.cos(a) * 3), fy + Math.round(Math.sin(a) * 3), 2, 2, tone(col, -1.1));
+                    }
+                    pr(g, fx, fy, 2, 2, tone(col, 1.6));
+                }
+            }
+        }
+        else if (paper === 'plank')
+        {
+            for (i = 0; i < TILE; i += 8)
+            {
+                pr(g, i, 0, 7, TILE, tone(col, (i / 8) % 2 ? -.5 : .3));
+                pr(g, i, 0, 1, TILE, tone(col, 1));
+                pr(g, i + 7, 0, 1, TILE, tone(col, -1.7));
+            }
+        }
+        else if (paper === 'brick')
+        {
+            for (j = 0; j < TILE; j += 8)
+            {
+                var off = ((j / 8) % 2) * 8;
+                for (i = -off; i < TILE; i += 16)
+                {
+                    pr(g, i + 1, j + 1, 14, 6, tone(col, ((i + j) % 3 === 0) ? .5 : -.4));
+                    pr(g, i + 1, j + 1, 14, 1, tone(col, 1.2));
+                }
+                pr(g, 0, j + 7, TILE, 1, tone(col, -1.8));
+            }
+        }
+        else if (paper === 'tile')
+        {
+            for (j = 0; j < TILE; j += 8)
+            {
+                for (i = 0; i < TILE; i += 8)
+                {
+                    pr(g, i + 1, j + 1, 6, 6, tone(col, ((i + j) / 8) % 2 ? .5 : -.3));
+                    pr(g, i + 1, j + 1, 6, 1, tone(col, 1.3));
+                }
+            }
+        }
+        else
+        {
+            crumbs(g, 0, 0, TILE, TILE, [tone(col, .6), tone(col, -.6)], 10, variant);
+        }
+        // top rail
+        pr(g, 0, 0, TILE, 3, tone(col, 1.5));
+        pr(g, 0, 3, TILE, 1, tone(col, -1.4));
+        if (bottom)
+        {
+            // skirting board + the shadow it drops onto the floor
+            pr(g, 0, TILE - 8, TILE, 5, tone(col, -1.1));
+            pr(g, 0, TILE - 8, TILE, 1, tone(col, 1.2));
+            pr(g, 0, TILE - 3, TILE, 3, tone(col, -2.3));
+        }
+    });
+}
+
+function sprRug(kind)
+{
+    return bake('rug:' + kind, TILE * 3, TILE * 2, function (g)
+    {
+        var pal = {
+            red: ['#a84a48', '#d8746a', '#f0d8a8'],
+            blue: ['#3f6a9a', '#6a9ac8', '#e8e8f0'],
+            green: ['#4a7a4a', '#7aaa6a', '#e8e0c0'],
+            purple: ['#6a4a8a', '#9a7ab8', '#f0e0f0']
+        }[kind] || ['#a84a48', '#d8746a', '#f0d8a8'];
+        var W = TILE * 3, H = TILE * 2;
+        pr(g, 2, 2, W - 4, H - 4, pal[0]);
+        pr(g, 2, 2, W - 4, 2, tone(pal[0], 1.2));
+        pr(g, 2, H - 4, W - 4, 2, tone(pal[0], -1.6));
+        pr(g, 8, 8, W - 16, H - 16, pal[1]);
+        pr(g, 14, 14, W - 28, H - 28, pal[2]);
+        pr(g, 20, 20, W - 40, H - 40, pal[1]);
+        var i;
+        for (i = 0; i < W; i += 4)
+        {
+            pr(g, i, 0, 2, 2, pal[2]);
+            pr(g, i, H - 2, 2, 2, pal[2]);
+        }
     });
 }
 
@@ -3777,75 +3965,260 @@ function sprCrop(seedId, stage)
     var key = 'crop:' + seedId + ':' + stage;
     return bake(key, TILE, TILE + 12, function (g)
     {
-        var H = TILE + 12;
-        var stem = '#4d9130';
-        var base = H - 6;
+        drawCropForm(g, cd, prod, stage);
+    }, { outline: true });
+}
 
-        function leafPair(y, len, up)
-        {
-            pe(g, 16 - len, y, len * .7, 3, tone(stem, -.7));
-            pe(g, 16 + len, y - (up || 0), len * .7, 3, stem);
-            pe(g, 16 - len - 1, y - 1, len * .4, 1, tone(stem, 1.2));
-            pe(g, 16 + len - 1, y - 1 - (up || 0), len * .4, 1, tone(stem, 1.4));
-        }
+// Every crop used to share one stem-and-leaf template, so 33 crops looked
+// identical until the very last stage. Each growth form now has its own
+// silhouette across all five stages.
+function drawCropForm(g, cd, prod, stage)
+{
+    var H = TILE + 12;
+    var base = H - 6;
+    var stem = '#4d9130';
+    var sd = tone(stem, -1.3), sl = tone(stem, 1.2);
+    var form = cd.form || 'root';
+    var pc = prod.cols[0];
 
-        if (stage === 0)
+    function sprout()
+    {
+        pr(g, 15, base - 5, 2, 5, stem);
+        pe(g, 12, base - 6, 3, 2, sl);
+        pe(g, 20, base - 7, 3, 2, stem);
+    }
+    function leafFan(cy, n, len, lift)
+    {
+        var i;
+        for (i = 0; i < n; i++)
         {
-            pr(g, 15, base - 5, 2, 5, stem);
-            pe(g, 13, base - 6, 3, 2, tone(stem, .8));
-            pe(g, 19, base - 7, 3, 2, stem);
-            return;
+            var a = Math.PI + (i + .5) * (Math.PI / n);
+            var lx = 16 + Math.cos(a) * len;
+            var ly = cy + Math.sin(a) * len * .42 + (lift || 0);
+            pe(g, lx, ly, Math.max(2, len * .34), Math.max(1, len * .22), i % 2 ? stem : sd);
+            pe(g, lx - 1, ly - 1, Math.max(1, len * .18), 1, sl);
         }
+    }
+    function upright(h, leaves)
+    {
+        pr(g, 15, base - h, 2, h, stem);
+        pr(g, 15, base - h, 1, h, sl);
+        var i;
+        for (i = 0; i < leaves; i++)
+        {
+            var y = base - 4 - i * Math.floor(h / (leaves + 1));
+            var side = i % 2 ? 1 : -1;
+            pe(g, 16 + side * 6, y, 5, 2, side < 0 ? stem : sd);
+            pe(g, 16 + side * 9, y - 1, 3, 1, sl);
+        }
+    }
+
+    if (stage === 0)
+    {
+        sprout();
+        return;
+    }
+
+    if (form === 'root')
+    {
         if (stage === 1)
         {
+            pr(g, 15, base - 5, 2, 5, stem);
+            leafFan(base - 4, 3, 8);
+        }
+        else if (stage === 2)
+        {
+            pr(g, 15, base - 8, 2, 8, stem);
+            leafFan(base - 6, 4, 12);
+        }
+        else if (stage === 3)
+        {
             pr(g, 15, base - 11, 2, 11, stem);
-            pr(g, 15, base - 11, 1, 11, tone(stem, 1));
-            leafPair(base - 9, 5);
-            leafPair(base - 4, 4, 1);
-            return;
+            leafFan(base - 8, 5, 15);
         }
-        if (stage === 2)
+        else
         {
-            pr(g, 15, base - 18, 2, 18, stem);
-            pr(g, 15, base - 18, 1, 18, tone(stem, 1));
-            leafPair(base - 15, 7);
-            leafPair(base - 10, 8, 1);
-            leafPair(base - 5, 6);
-            return;
+            pr(g, 15, base - 12, 2, 12, stem);
+            leafFan(base - 9, 6, 17);
+            pe(g, 16, base - 1, 6, 3, tone(pc, -.8));
+            pe(g, 16, base - 2, 5, 2, pc);
+            drawShape(g, prod.shape, prod.cols, 8, 0, 16);
         }
-        if (stage === 3)
-        {
-            pr(g, 15, base - 24, 2, 24, stem);
-            pr(g, 15, base - 24, 1, 24, tone(stem, 1));
-            leafPair(base - 21, 9);
-            leafPair(base - 15, 10, 1);
-            leafPair(base - 9, 8);
-            leafPair(base - 4, 6, 1);
-            // a bud hints that harvest is close
-            orb(g, 16, base - 26, 3, 3, tone(prod.cols[0], -1), 1);
-            return;
-        }
+        return;
+    }
 
-        // ripe
-        if (cd.trellis)
+    if (form === 'leafy')
+    {
+        var rings = [0, 2, 3, 4, 5][stage];
+        var i;
+        for (i = 0; i < rings; i++)
         {
-            var post = '#8a6a3a';
-            pr(g, 5, 4, 3, base - 4, post);
-            pr(g, 24, 4, 3, base - 4, post);
-            pr(g, 5, 4, 1, base - 4, tone(post, 1.1));
-            pr(g, 24, 4, 1, base - 4, tone(post, 1.1));
-            pr(g, 5, 12, 22, 2, post);
-            pr(g, 5, 24, 22, 2, post);
-            pr(g, 5, 12, 22, 1, tone(post, 1.1));
-            pr(g, 5, 24, 22, 1, tone(post, 1.1));
+            leafFan(base - 3 - i * 3, 4 + i, 9 + i * 3, -i);
         }
-        pr(g, 15, base - 26, 2, 26, stem);
-        pr(g, 15, base - 26, 1, 26, tone(stem, 1));
-        leafPair(base - 22, 10);
-        leafPair(base - 15, 11, 1);
-        leafPair(base - 8, 9);
-        drawShape(g, prod.shape, prod.cols, 6, 2, 20);
-    }, { outline: true });
+        if (stage === 4)
+        {
+            pr(g, 16, base - 18, 1, 4, sd);
+            pe(g, 16, base - 12, 8, 7, tone(pc, -1.1));
+            pe(g, 16, base - 13, 7, 6, pc);
+            pe(g, 13, base - 15, 3, 2, tone(pc, 1.5));
+        }
+        else if (stage === 3)
+        {
+            pe(g, 16, base - 10, 5, 4, tone(stem, .5));
+        }
+        return;
+    }
+
+    if (form === 'bush')
+    {
+        var r = [0, 4, 7, 10, 12][stage];
+        pr(g, 15, base - r, 2, r, sd);
+        leafClump(g, 16 - r * .55, base - r * .7, Math.max(3, r * .45), stem);
+        leafClump(g, 16 + r * .55, base - r * .6, Math.max(3, r * .42), tone(stem, -.5));
+        leafClump(g, 16, base - r * 1.05, Math.max(3, r * .5), tone(stem, .5));
+        if (stage >= 3)
+        {
+            leafClump(g, 16 - r * .3, base - r * 1.3, Math.max(3, r * .34), sl);
+        }
+        if (stage === 4)
+        {
+            var spots = [[-8, -6], [7, -9], [0, -15], [-4, -2]];
+            var k;
+            for (k = 0; k < spots.length; k++)
+            {
+                orb(g, 16 + spots[k][0], base + spots[k][1], 3, 3, pc, 1.8);
+            }
+        }
+        return;
+    }
+
+    if (form === 'vine')
+    {
+        var post = '#8a6a3a';
+        pr(g, 5, 4, 3, base - 4, post);
+        pr(g, 24, 4, 3, base - 4, post);
+        pr(g, 5, 4, 1, base - 4, tone(post, 1.1));
+        pr(g, 24, 4, 1, base - 4, tone(post, 1.1));
+        pr(g, 5, 12, 22, 2, post);
+        pr(g, 5, 24, 22, 2, post);
+        var climb = [0, 8, 16, 24, 30][stage];
+        var y;
+        for (y = 0; y < climb; y++)
+        {
+            var vx = 16 + Math.round(Math.sin(y * .45) * 6);
+            pr(g, vx, base - y, 2, 1, y % 3 === 0 ? sl : stem);
+            if (y % 5 === 2)
+            {
+                pe(g, vx + (y % 10 < 5 ? -4 : 5), base - y, 3, 2, sd);
+            }
+            if (y % 7 === 3)
+            {
+                pe(g, vx + (y % 14 < 7 ? 4 : -4), base - y - 1, 2, 1, sl);
+            }
+        }
+        if (stage === 4)
+        {
+            var vs = [[-6, -8], [6, -16], [-3, -24]];
+            var vi;
+            for (vi = 0; vi < vs.length; vi++)
+            {
+                drawShape(g, prod.shape, prod.cols, 16 + vs[vi][0] - 6, base + vs[vi][1] - 6, 13);
+            }
+        }
+        return;
+    }
+
+    if (form === 'stalk')
+    {
+        var h = [0, 7, 14, 22, 30][stage];
+        upright(h, [0, 1, 2, 3, 4][stage]);
+        if (stage === 4)
+        {
+            if (cd.crop === 'sunflower')
+            {
+                var si;
+                for (si = 0; si < 9; si++)
+                {
+                    var sa = si * .698;
+                    orb(g, 16 + Math.cos(sa) * 7, base - h - 3 + Math.sin(sa) * 7, 3, 3, pc, 1.7);
+                }
+                pe(g, 16, base - h - 3, 5, 5, '#6b4a1c');
+                pe(g, 15, base - h - 4, 3, 3, '#8a6428');
+            }
+            else if (cd.crop === 'corn')
+            {
+                pr(g, 15, base - h - 8, 3, 6, sl);
+                pe(g, 16, base - h + 4, 5, 9, tone(pc, -1));
+                pe(g, 16, base - h + 3, 4, 8, pc);
+                var ci;
+                for (ci = 0; ci < 5; ci++)
+                {
+                    pr(g, 12, base - h - 2 + ci * 3, 9, 1, tone(pc, -1.2));
+                }
+            }
+            else
+            {
+                drawShape(g, prod.shape, prod.cols, 8, base - h - 12, 17);
+            }
+        }
+        else if (stage === 3)
+        {
+            pe(g, 16, base - h - 2, 3, 4, tone(pc, -1.4));
+        }
+        return;
+    }
+
+    if (form === 'sprawl')
+    {
+        var spread = [0, 5, 10, 14, 16][stage];
+        var sx;
+        for (sx = -spread; sx <= spread; sx++)
+        {
+            pr(g, 16 + sx, base - 2 + Math.round(Math.sin(sx * .5) * 2), 1, 2, sx % 4 === 0 ? sl : stem);
+        }
+        var li;
+        for (li = 0; li < stage + 1; li++)
+        {
+            var lx2 = 16 + (li % 2 ? 1 : -1) * (3 + li * 3);
+            pe(g, lx2, base - 5 - (li % 2) * 2, 5, 3, li % 2 ? stem : sd);
+            pe(g, lx2 - 1, base - 6 - (li % 2) * 2, 2, 1, sl);
+        }
+        if (stage === 4)
+        {
+            drawShape(g, prod.shape, prod.cols, 7, base - 20, 19);
+        }
+        else if (stage === 3)
+        {
+            pe(g, 16, base - 4, 4, 3, tone(pc, -1.2));
+        }
+        return;
+    }
+
+    // flower
+    var fh = [0, 6, 12, 18, 22][stage];
+    pr(g, 15, base - fh, 2, fh, stem);
+    pr(g, 15, base - fh, 1, fh, sl);
+    pe(g, 11, base - 5, 4, 2, stem);
+    if (stage >= 2)
+    {
+        pe(g, 21, base - 10, 4, 2, sd);
+    }
+    if (stage === 3)
+    {
+        pe(g, 16, base - fh - 3, 3, 5, tone(pc, -1.2));
+        pe(g, 15, base - fh - 4, 2, 2, tone(pc, .4));
+    }
+    else if (stage === 4)
+    {
+        var pi;
+        for (pi = 0; pi < 6; pi++)
+        {
+            var pa = pi * 1.047;
+            orb(g, 16 + Math.cos(pa) * 6, base - fh - 4 + Math.sin(pa) * 6, 4, 4, pi % 2 ? pc : tone(pc, .5), 1.6);
+        }
+        orb(g, 16, base - fh - 4, 3, 3, '#f2d95e', 1.6);
+        pr(g, 14, base - fh - 6, 1, 1, '#fff3b4');
+    }
 }
 
 // ---------- item icon shapes ----------
@@ -5450,67 +5823,103 @@ var MAPS = {
 // generated from a compact template: floor style, wall color, furniture list.
 
 var INTERIORS = {
-    farmhouse: { name: '우리 집', w: 18, h: 12, floor: T_WOOD, wall: '#c8a878',
-        f: [{ k: 'bed', x: 14, y: 2 }, { k: 'tv', x: 2, y: 2 }, { k: 'table', x: 8, y: 6 },
-            { k: 'kitchen', x: 2, y: 6 }, { k: 'chest', x: 12, y: 8 }, { k: 'calendar', x: 6, y: 1 }],
+    farmhouse: { name: '우리 집', w: 18, h: 12, floor: T_WOOD, wall: '#d8b88c', paper: 'stripe',
+        rugs: [{ c: 'red', x: 7, y: 7 }],
+        f: [{ k: 'bed', x: 14, y: 2 }, { k: 'tv', x: 2, y: 2 }, { k: 'table', x: 8, y: 5 },
+            { k: 'kitchen', x: 2, y: 6 }, { k: 'chest', x: 12, y: 8 }, { k: 'calendar', x: 6, y: 1 },
+            { k: 'plant', x: 16, y: 8 }, { k: 'painting', x: 10, y: 1 }, { k: 'lamp', x: 13, y: 6 },
+            { k: 'stool', x: 7, y: 8 }, { k: 'books', x: 2, y: 9 }],
         exit: { x: 8, y: 11, to: 'farm', tx: 21, ty: 10 } },
-    greenhouse: { name: '온실', w: 20, h: 14, floor: T_STONE, wall: '#a8c8b8',
-        f: [], till: { x: 3, y: 3, w: 14, h: 9 },
+    greenhouse: { name: '온실', w: 20, h: 14, floor: T_STONE, wall: '#a8c8b8', paper: 'tile',
+        f: [{ k: 'plant', x: 2, y: 2 }, { k: 'plant', x: 17, y: 2 }, { k: 'crate', x: 2, y: 11 }],
+        till: { x: 3, y: 3, w: 14, h: 9 },
         exit: { x: 10, y: 13, to: 'farm', tx: 12, ty: 10 } },
-    pierre_shop: { name: '피에르 잡화점', w: 18, h: 12, floor: T_WOOD, wall: '#d8c8a8',
-        f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }, { k: 'shelf', x: 14, y: 2 }],
-        shop: 'pierre', npc: { id: 'pierre', x: 9, y: 4 },
+    pierre_shop: { name: '피에르 잡화점', w: 18, h: 12, floor: T_WOOD, wall: '#e0cda6', paper: 'plank',
+        rugs: [{ c: 'green', x: 7, y: 8 }],
+        f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }, { k: 'shelf', x: 14, y: 2 },
+            { k: 'goods', x: 2, y: 5 }, { k: 'goods', x: 14, y: 5 }, { k: 'crate', x: 2, y: 9 },
+            { k: 'crate', x: 15, y: 9 }, { k: 'plant', x: 16, y: 7 }],
+        shop: 'pierre', npc: { id: 'pierre', x: 9, y: 5 },
         exit: { x: 8, y: 11, to: 'town', tx: 15, ty: 12 } },
-    saloon: { name: '스타드롭 살롱', w: 20, h: 12, floor: T_WOOD, wall: '#a86848',
-        f: [{ k: 'counter', x: 4, y: 3 }, { k: 'table', x: 12, y: 5 }, { k: 'table', x: 16, y: 8 }],
-        shop: 'saloon', npc: { id: 'gus', x: 5, y: 4 },
+    saloon: { name: '스타드롭 살롱', w: 20, h: 12, floor: T_WOOD, wall: '#a86848', paper: 'brick',
+        rugs: [{ c: 'purple', x: 13, y: 8 }],
+        f: [{ k: 'counter', x: 4, y: 3 }, { k: 'table', x: 12, y: 5 }, { k: 'table', x: 16, y: 8 },
+            { k: 'stool', x: 4, y: 6 }, { k: 'stool', x: 6, y: 6 }, { k: 'stool', x: 8, y: 6 },
+            { k: 'goods', x: 2, y: 1 }, { k: 'lamp', x: 11, y: 2 }, { k: 'painting', x: 15, y: 1 },
+            { k: 'barrel', x: 18, y: 3 }],
+        shop: 'saloon', npc: { id: 'gus', x: 5, y: 6 },
         exit: { x: 10, y: 11, to: 'town', tx: 27, ty: 12 } },
-    clinic: { name: '해비 병원', w: 16, h: 11, floor: T_STONE, wall: '#e8e8f0',
-        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'bed', x: 12, y: 3 }],
-        npc: { id: 'harvey', x: 8, y: 4 }, heal: true,
+    clinic: { name: '해비 병원', w: 16, h: 11, floor: T_STONE, wall: '#e4eef2', paper: 'tile',
+        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'bed', x: 12, y: 3 }, { k: 'plant', x: 2, y: 2 },
+            { k: 'books', x: 2, y: 8 }, { k: 'painting', x: 5, y: 1 }, { k: 'lamp', x: 11, y: 7 }],
+        npc: { id: 'harvey', x: 8, y: 5 }, heal: true,
         exit: { x: 7, y: 10, to: 'town', tx: 47, ty: 14 } },
-    center: { name: '커뮤니티 센터', w: 24, h: 16, floor: T_WOOD, wall: '#c8bca0',
-        f: [], bundleRoom: true,
+    center: { name: '커뮤니티 센터', w: 24, h: 16, floor: T_WOOD, wall: '#c8bca0', paper: 'plank',
+        rugs: [{ c: 'blue', x: 10, y: 11 }],
+        f: [{ k: 'plant', x: 2, y: 2 }, { k: 'plant', x: 21, y: 2 }, { k: 'crate', x: 3, y: 13 },
+            { k: 'crate', x: 20, y: 13 }, { k: 'painting', x: 11, y: 1 }, { k: 'lamp', x: 5, y: 6 },
+            { k: 'lamp', x: 18, y: 6 }, { k: 'books', x: 2, y: 8 }],
+        bundleRoom: true,
         exit: { x: 12, y: 15, to: 'town', tx: 8, ty: 11 } },
-    blacksmith: { name: '클린트 대장간', w: 16, h: 11, floor: T_STONE, wall: '#9a8a7a',
-        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'forge', x: 12, y: 3 }],
-        shop: 'clint', npc: { id: 'clint', x: 8, y: 4 },
+    blacksmith: { name: '클린트 대장간', w: 16, h: 11, floor: T_STONE, wall: '#9a8a7a', paper: 'brick',
+        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'forge', x: 12, y: 3 }, { k: 'crate', x: 2, y: 2 },
+            { k: 'crate', x: 2, y: 8 }, { k: 'barrel', x: 4, y: 8 }, { k: 'goods', x: 4, y: 1 }],
+        shop: 'clint', npc: { id: 'clint', x: 8, y: 5 },
         exit: { x: 7, y: 10, to: 'town', tx: 48, ty: 36 } },
-    museum: { name: '박물관 · 도서관', w: 20, h: 12, floor: T_STONE, wall: '#d0c8b0',
-        f: [{ k: 'shelf', x: 3, y: 2 }, { k: 'shelf', x: 8, y: 2 }, { k: 'shelf', x: 13, y: 2 }],
-        museum: true, npc: { id: 'gunther', x: 16, y: 4 },
+    museum: { name: '박물관 · 도서관', w: 20, h: 12, floor: T_STONE, wall: '#d0c8b0', paper: 'floral',
+        rugs: [{ c: 'red', x: 8, y: 8 }],
+        f: [{ k: 'books', x: 3, y: 2 }, { k: 'books', x: 8, y: 2 }, { k: 'books', x: 13, y: 2 },
+            { k: 'painting', x: 2, y: 6 }, { k: 'painting', x: 16, y: 6 }, { k: 'plant', x: 18, y: 9 },
+            { k: 'goods', x: 5, y: 5 }, { k: 'lamp', x: 12, y: 6 }],
+        museum: true, npc: { id: 'gunther', x: 17, y: 4 },
         exit: { x: 10, y: 11, to: 'town', tx: 47, ty: 22 } },
-    carpenter: { name: '로빈 목공소', w: 18, h: 12, floor: T_WOOD, wall: '#c8a878',
-        f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }],
-        shop: 'robin', npc: { id: 'robin', x: 9, y: 4 },
+    carpenter: { name: '로빈 목공소', w: 18, h: 12, floor: T_WOOD, wall: '#c8a878', paper: 'plank',
+        f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }, { k: 'crate', x: 2, y: 8 },
+            { k: 'crate', x: 4, y: 8 }, { k: 'crate', x: 15, y: 8 }, { k: 'goods', x: 14, y: 1 },
+            { k: 'plant', x: 16, y: 5 }],
+        shop: 'robin', npc: { id: 'robin', x: 9, y: 5 },
         exit: { x: 9, y: 11, to: 'mountain', tx: 7, ty: 26 } },
-    ranch: { name: '마니 목장', w: 18, h: 12, floor: T_WOOD, wall: '#c8b898',
-        f: [{ k: 'counter', x: 8, y: 3 }, { k: 'hay', x: 14, y: 6 }],
-        shop: 'marnie', npc: { id: 'marnie', x: 9, y: 4 },
+    ranch: { name: '마니 목장', w: 18, h: 12, floor: T_WOOD, wall: '#c8b898', paper: 'plank',
+        f: [{ k: 'counter', x: 8, y: 3 }, { k: 'hay', x: 14, y: 6 }, { k: 'crate', x: 2, y: 8 },
+            { k: 'barrel', x: 2, y: 2 }, { k: 'goods', x: 4, y: 1 }, { k: 'plant', x: 16, y: 9 }],
+        shop: 'marnie', npc: { id: 'marnie', x: 9, y: 5 },
         exit: { x: 9, y: 11, to: 'forest', tx: 37, ty: 14 } },
-    fishshop: { name: '윌리 낚시가게', w: 16, h: 11, floor: T_WOOD, wall: '#a8b8c8',
-        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'barrel', x: 12, y: 6 }],
-        shop: 'willy', npc: { id: 'willy', x: 8, y: 4 },
+    fishshop: { name: '윌리 낚시가게', w: 16, h: 11, floor: T_WOOD, wall: '#a8b8c8', paper: 'plank',
+        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'barrel', x: 12, y: 6 }, { k: 'barrel', x: 2, y: 6 },
+            { k: 'crate', x: 2, y: 2 }, { k: 'goods', x: 4, y: 1 }, { k: 'painting', x: 12, y: 1 }],
+        shop: 'willy', npc: { id: 'willy', x: 8, y: 5 },
         exit: { x: 7, y: 10, to: 'beach', tx: 42, ty: 14 } },
-    guild: { name: '모험가 길드', w: 16, h: 11, floor: T_STONE, wall: '#8a7a6a',
-        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'forge', x: 12, y: 3 }],
-        guild: true, npc: { id: 'marlon', x: 8, y: 4 },
+    guild: { name: '모험가 길드', w: 16, h: 11, floor: T_STONE, wall: '#8a7a6a', paper: 'brick',
+        rugs: [{ c: 'red', x: 6, y: 7 }],
+        f: [{ k: 'counter', x: 7, y: 3 }, { k: 'forge', x: 12, y: 3 }, { k: 'crate', x: 2, y: 2 },
+            { k: 'lamp', x: 2, y: 7 }, { k: 'painting', x: 4, y: 1 }],
+        guild: true, npc: { id: 'marlon', x: 8, y: 5 },
         exit: { x: 7, y: 10, to: 'mountain', tx: 36, ty: 33 } },
-    wizard: { name: '마법사의 탑', w: 14, h: 11, floor: T_CARPET, wall: '#6a5a8a',
-        f: [{ k: 'shelf', x: 3, y: 2 }, { k: 'orb', x: 10, y: 3 }],
-        npc: { id: 'wizard', x: 7, y: 4 },
+    wizard: { name: '마법사의 탑', w: 14, h: 11, floor: T_CARPET, wall: '#6a5a8a', paper: 'floral',
+        rugs: [{ c: 'purple', x: 5, y: 7 }],
+        f: [{ k: 'books', x: 2, y: 2 }, { k: 'orb', x: 10, y: 3 }, { k: 'books', x: 10, y: 7 },
+            { k: 'lamp', x: 2, y: 7 }, { k: 'plant', x: 12, y: 5 }],
+        npc: { id: 'wizard', x: 7, y: 5 },
         exit: { x: 7, y: 10, to: 'forest', tx: 46, ty: 39 } },
-    house_alex: { name: '알렉스네 집', w: 14, h: 10, floor: T_WOOD, wall: '#d8c0a0',
-        f: [{ k: 'table', x: 6, y: 4 }, { k: 'bed', x: 11, y: 2 }],
+    house_alex: { name: '알렉스네 집', w: 14, h: 10, floor: T_WOOD, wall: '#d8c0a0', paper: 'stripe',
+        rugs: [{ c: 'blue', x: 5, y: 6 }],
+        f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'tv', x: 2, y: 2 },
+            { k: 'plant', x: 12, y: 7 }, { k: 'painting', x: 8, y: 1 }],
         exit: { x: 7, y: 9, to: 'town', tx: 10, ty: 35 } },
-    house_haley: { name: '헤일리네 집', w: 14, h: 10, floor: T_WOOD, wall: '#e8d0d8',
-        f: [{ k: 'table', x: 6, y: 4 }, { k: 'bed', x: 11, y: 2 }],
+    house_haley: { name: '헤일리네 집', w: 14, h: 10, floor: T_WOOD, wall: '#e8d0d8', paper: 'floral',
+        rugs: [{ c: 'purple', x: 5, y: 6 }],
+        f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'painting', x: 2, y: 1 },
+            { k: 'lamp', x: 2, y: 6 }, { k: 'plant', x: 12, y: 7 }],
         exit: { x: 7, y: 9, to: 'town', tx: 18, ty: 37 } },
-    house_sam: { name: '샘네 집', w: 14, h: 10, floor: T_WOOD, wall: '#d0d8e8',
-        f: [{ k: 'table', x: 6, y: 4 }, { k: 'bed', x: 11, y: 2 }],
+    house_sam: { name: '샘네 집', w: 14, h: 10, floor: T_WOOD, wall: '#d0d8e8', paper: 'stripe',
+        rugs: [{ c: 'green', x: 5, y: 6 }],
+        f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'books', x: 2, y: 2 },
+            { k: 'stool', x: 2, y: 7 }, { k: 'painting', x: 8, y: 1 }],
         exit: { x: 7, y: 9, to: 'town', tx: 28, ty: 35 } },
-    house_leah: { name: '리아의 오두막', w: 14, h: 10, floor: T_WOOD, wall: '#c8b090',
-        f: [{ k: 'table', x: 6, y: 4 }, { k: 'bed', x: 11, y: 2 }],
+    house_leah: { name: '리아의 오두막', w: 14, h: 10, floor: T_WOOD, wall: '#c8b090', paper: 'plank',
+        rugs: [{ c: 'red', x: 5, y: 6 }],
+        f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'crate', x: 2, y: 2 },
+            { k: 'plant', x: 12, y: 7 }, { k: 'painting', x: 8, y: 1 }, { k: 'lamp', x: 2, y: 6 }],
         exit: { x: 7, y: 9, to: 'forest', tx: 32, ty: 35 } }
 };
 
@@ -5634,15 +6043,23 @@ function buildInterior(id)
     {
         fillRect(m, d.till.x, d.till.y, d.till.w, d.till.h, T_DIRT);
     }
+    for (i = 0; i < (d.rugs || []).length; i++)
+    {
+        m.objects.push({ kind: 'rug', rk: d.rugs[i].c, x: d.rugs[i].x, y: d.rugs[i].y });
+    }
     for (i = 0; i < (d.f || []).length; i++)
     {
         var f = d.f[i];
         m.objects.push({ kind: 'furn', fk: f.k, x: f.x, y: f.y });
         var fw = { bed: 2, table: 3, counter: 5, shelf: 3, kitchen: 3, tv: 2, chest: 1,
-            forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 2 }[f.k] || 1;
+            forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 2, plant: 1, painting: 2,
+            lamp: 1, stool: 1, crate: 1, books: 2, goods: 2 }[f.k] || 1;
         var fh = { bed: 3, table: 2, counter: 2, shelf: 2, kitchen: 2, tv: 2, chest: 1,
-            forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 1 }[f.k] || 1;
-        if (f.k !== 'chest' && f.k !== 'calendar')
+            forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 1, plant: 1, painting: 1,
+            lamp: 1, stool: 1, crate: 1, books: 1, goods: 1 }[f.k] || 1;
+        // wall hangings and small props do not block movement
+        var passable = { chest: 1, calendar: 1, painting: 1, goods: 1 };
+        if (!passable[f.k])
         {
             fillRect(m, f.x, f.y, fw, fh, T_WALL);
         }
@@ -5942,6 +6359,33 @@ function warpAt(m, tx, ty)
 
 // ---------- static ground layer ----------
 
+// Baked ground layers are big (the farm alone is 1664x1408). Keeping one per
+// visited map crept past 30MB, which is enough for iOS Safari to reap the tab.
+// Hold on to the few most recently drawn and release the rest.
+var GROUND_LRU = [];
+var GROUND_KEEP = 3;
+
+function releaseOldGround(current)
+{
+    var i = GROUND_LRU.indexOf(current);
+    if (i >= 0)
+    {
+        GROUND_LRU.splice(i, 1);
+    }
+    GROUND_LRU.push(current);
+    while (GROUND_LRU.length > GROUND_KEEP)
+    {
+        var m = GROUND_LRU.shift();
+        if (m && m !== current && m._gc)
+        {
+            m._gc.width = 0;
+            m._gc.height = 0;
+            m._gc = null;
+            m._gcKey = null;
+        }
+    }
+}
+
 function groundCanvas(m, season, waterFrame)
 {
     var key = 'g:' + m.id + ':' + season;
@@ -5950,6 +6394,7 @@ function groundCanvas(m, season, waterFrame)
         m._gc = makeCv(m.w * TILE, m.h * TILE);
         m._gcKey = key;
         m.groundDirty = false;
+        releaseOldGround(m);
         var g = m._gc.getContext('2d');
         g.imageSmoothingEnabled = false;
         var x, y;
@@ -5977,7 +6422,7 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_WOOD || t === T_BRIDGE)
                 {
-                    img = tileWoodFloor();
+                    img = tileWoodFloor(Math.floor(hash2(x, y, 59) * 4));
                 }
                 else if (t === T_PATH)
                 {
@@ -5997,9 +6442,7 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_CARPET)
                 {
-                    img = null;
-                    g.fillStyle = '#6a4a7a';
-                    g.fillRect(x * TILE, y * TILE, TILE, TILE);
+                    img = tileCarpet(Math.floor(hash2(x, y, 67) * 3));
                 }
                 else if (t === T_CLIFF)
                 {
@@ -6008,14 +6451,11 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_WALL)
                 {
-                    img = null;
                     var wc = (m.interior && m.interior.wall) || '#c8a878';
-                    g.fillStyle = wc;
-                    g.fillRect(x * TILE, y * TILE, TILE, TILE);
-                    g.fillStyle = shade(wc, -30);
-                    g.fillRect(x * TILE, y * TILE + TILE - 3, TILE, 3);
-                    g.fillStyle = shade(wc, 18);
-                    g.fillRect(x * TILE, y * TILE, TILE, 2);
+                    var wp = (m.interior && m.interior.paper) || 'plain';
+                    var below = tileAt(m, x, y + 1);
+                    img = tileWall(wc, wp, Math.floor(hash2(x, y, 71) * 4),
+                        below !== T_WALL && below !== T_VOID);
                 }
                 if (img)
                 {
@@ -6254,6 +6694,9 @@ function drawObject(g, o, cam, season, tick)
             break;
         case 'mine_entrance':
             drawMineEntrance(g, x, y);
+            break;
+        case 'rug':
+            g.drawImage(sprRug(o.rk), x, y);
             break;
         case 'furn':
             drawFurniture(g, o.fk, x, y);
@@ -6556,6 +6999,85 @@ function drawFurniture(g, kind, x, y)
         pe(g, x + 12, y + 11, 4, 3, '#e2ccfa');
         pr(g, x + 10, y + 6, 2, 2, 'rgba(230,210,255,.7)');
         pr(g, x + 22, y + 20, 2, 2, 'rgba(230,210,255,.6)');
+    }
+
+    else if (kind === 'plant')
+    {
+        pr(g, x + 6, y + 30, 20, 16, '#a5763f');
+        pr(g, x + 6, y + 30, 20, 3, '#c69660');
+        pr(g, x + 8, y + 42, 16, 4, '#7a4f28');
+        pr(g, x + 8, y + 26, 16, 5, '#5c3f22');
+        leafClump(g, x + 10, y + 18, 8, '#4a8a3a');
+        leafClump(g, x + 22, y + 16, 8, '#3f7a32');
+        leafClump(g, x + 16, y + 8, 9, '#57a03f');
+        leafClump(g, x + 8, y + 8, 6, '#4a8a3a');
+    }
+    else if (kind === 'painting')
+    {
+        pr(g, x, y, 48, 34, '#8a6a3a');
+        pr(g, x, y, 48, 3, '#b08c50');
+        pr(g, x, y + 31, 48, 3, '#5e4622');
+        pr(g, x + 4, y + 4, 40, 26, '#9fc4d8');
+        pr(g, x + 4, y + 4, 40, 12, '#bcd8e8');
+        pe(g, x + 16, y + 24, 14, 6, '#4a8a3a');
+        pe(g, x + 34, y + 26, 12, 5, '#3f7a32');
+        pe(g, x + 36, y + 10, 5, 5, '#f4dc6a');
+        pr(g, x + 4, y + 26, 40, 4, '#5a8a4a');
+    }
+    else if (kind === 'lamp')
+    {
+        pr(g, x + 12, y + 24, 8, 22, '#6a5a4a');
+        pr(g, x + 12, y + 24, 3, 22, '#8a7a68');
+        pr(g, x + 6, y + 44, 20, 4, '#5a4a3a');
+        pr(g, x + 4, y + 6, 24, 18, '#e8c878');
+        pr(g, x + 4, y + 6, 24, 3, '#f4e0a8');
+        pr(g, x + 4, y + 21, 24, 3, '#c8a048');
+        pe(g, x + 16, y + 26, 9, 4, 'rgba(255,235,160,.35)');
+    }
+    else if (kind === 'stool')
+    {
+        pr(g, x + 2, y + 8, 24, 8, '#a5763f');
+        pr(g, x + 2, y + 8, 24, 3, '#c69660');
+        pr(g, x + 4, y + 16, 5, 14, '#7a4f28');
+        pr(g, x + 19, y + 16, 5, 14, '#7a4f28');
+        pr(g, x + 4, y + 22, 20, 3, '#8a5f38');
+    }
+    else if (kind === 'crate')
+    {
+        pr(g, x + 2, y + 6, 28, 26, '#9a6a3c');
+        pr(g, x + 2, y + 6, 28, 3, '#bc8a54');
+        pr(g, x + 2, y + 29, 28, 3, '#6f4a20');
+        pr(g, x + 2, y + 16, 28, 3, '#7a5228');
+        pr(g, x + 14, y + 6, 3, 26, '#7a5228');
+        pr(g, x + 6, y + 10, 4, 4, '#c69660');
+    }
+    else if (kind === 'books')
+    {
+        pr(g, x, y, 64, 46, '#7a5228');
+        pr(g, x, y, 64, 3, '#a5763f');
+        pr(g, x + 3, y + 4, 58, 18, '#4a3218');
+        pr(g, x + 3, y + 25, 58, 18, '#4a3218');
+        var bi, cols = ['#c85a48', '#4a8ac8', '#e8c838', '#68b848', '#a858d8', '#e88a48', '#48b8a8'];
+        for (bi = 0; bi < 9; bi++)
+        {
+            pr(g, x + 5 + bi * 6, y + 6, 5, 15, cols[bi % cols.length]);
+            pr(g, x + 5 + bi * 6, y + 6, 5, 1, '#ffffff');
+            pr(g, x + 5 + bi * 6, y + 27, 5, 15, cols[(bi + 3) % cols.length]);
+            pr(g, x + 5 + bi * 6, y + 27, 5, 1, '#ffffff');
+        }
+        pr(g, x + 3, y + 22, 58, 3, '#8a5f38');
+        pr(g, x + 3, y + 43, 58, 3, '#8a5f38');
+    }
+    else if (kind === 'goods')
+    {
+        var gi, gc = ['#c85a48', '#68b848', '#e8c838', '#a858d8', '#4a8ac8'];
+        for (gi = 0; gi < 5; gi++)
+        {
+            orb(g, x + 8 + gi * 12, y + 22, 5, 8, gc[gi], 1.5);
+            pr(g, x + 5 + gi * 12, y + 13, 6, 3, '#8a6a3a');
+        }
+        pr(g, x, y + 28, 62, 4, '#8a5f38');
+        pr(g, x, y + 28, 62, 1, '#ab7a4a');
     }
     else if (kind === 'calendar')
     {
@@ -13897,7 +14419,7 @@ function doToolAction()
         return;
     }
     var f = facingTile();
-    PLAYER.act = 14;
+    PLAYER.act = 18;
     PLAYER.actKind = sl.id;
 
     switch (sl.id)
@@ -15331,6 +15853,11 @@ function drawPlayer(g)
     var dir = S.dir === 0 ? 0 : (S.dir === 1 ? 1 : 2);
     var flip = S.dir === 3;
     var frame = PLAYER.moving ? PLAYER.frame : 0;
+    if (PLAYER.act > 0)
+    {
+        // 4 = wind up, 5 = strike, 6 = recover
+        frame = PLAYER.act > 12 ? 4 : (PLAYER.act > 6 ? 5 : 6);
+    }
     if (MINE.hurtCd > 40 && MINE.hurtCd % 6 < 3)
     {
         g.globalAlpha = .5;
@@ -15350,19 +15877,40 @@ function drawPlayer(g)
     }
     g.globalAlpha = 1;
 
-    // tool swing pose
+    // the held tool follows the same arc as the pose
     if (PLAYER.act > 0)
     {
         PLAYER.act--;
-        var p = 1 - PLAYER.act / 14;
-        var ico = itemIcon(PLAYER.actKind, 26);
-        var ox = S.dir === 2 ? -22 : (S.dir === 3 ? 22 : 0);
-        var oy = S.dir === 1 ? -22 : (S.dir === 0 ? 14 : -4);
+        var p = 1 - PLAYER.act / 18;
+        var ico = itemIcon(PLAYER.actKind, 28);
+        // arc: starts overhead behind the farmer, ends on the target tile
+        var a0 = -2.3, a1 = .5;
+        var ang = a0 + (a1 - a0) * Math.min(1, p * 1.35);
+        var reach = 16 + Math.sin(Math.min(1, p * 1.35) * Math.PI) * 8;
+        var fx = 0, fy = 0;
+        if (S.dir === 0) { fy = 1; }
+        else if (S.dir === 1) { fy = -1; }
+        else if (S.dir === 2) { fx = -1; }
+        else { fx = 1; }
+        var px2 = x + PW / 2 + fx * reach;
+        var py2 = y + 26 + fy * reach - Math.cos(Math.min(1, p * 1.35) * Math.PI) * 8;
         g.save();
-        g.translate(x + PW / 2 + ox, y + 30 + oy);
-        g.rotate((S.dir === 2 ? -1 : 1) * (-.7 + p * 1.5));
-        g.drawImage(ico, -13, -13);
+        g.translate(px2, py2);
+        g.rotate((S.dir === 2 ? -1 : 1) * ang);
+        g.drawImage(ico, -14, -14);
         g.restore();
+        // motion arc so the swing reads even at one frame
+        if (p > .2 && p < .8)
+        {
+            g.globalAlpha = .3;
+            g.strokeStyle = 'rgba(255,255,255,.8)';
+            g.lineWidth = 2;
+            g.beginPath();
+            g.arc(x + PW / 2 + fx * 6, y + 26 + fy * 6, reach + 4,
+                (S.dir === 2 ? Math.PI : 0) - 1.9, (S.dir === 2 ? Math.PI : 0) + .2);
+            g.stroke();
+            g.globalAlpha = 1;
+        }
     }
 }
 
