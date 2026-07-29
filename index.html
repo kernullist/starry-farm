@@ -1189,7 +1189,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '1.1';
+var GAME_VER = '1.2';
 
 // ---------- core constants ----------
 
@@ -2529,11 +2529,113 @@ function crumbs(g, x, y, w, h, cols, n, seed)
     }
 }
 
-// contact shadow so entities sit on the ground
+// contact shadow so entities sit on the ground. offset toward the light's
+// opposite corner (lower-right) so it reads as a cast shadow, not a dark halo.
 function contactShadow(g, cx, cy, rx, ry)
 {
-    pe(g, cx, cy, rx, ry, 'rgba(24,18,10,.26)');
-    pe(g, cx, cy, Math.max(1, rx * .6), Math.max(1, ry * .6), 'rgba(24,18,10,.2)');
+    var ox = -LIGHT_X * rx * .22, oy = -LIGHT_Y * ry * .3;
+    pe(g, cx + ox, cy + oy, rx, ry, 'rgba(26,20,12,.3)');
+    pe(g, cx + ox * .4, cy, Math.max(1, rx * .72), Math.max(1, ry * .8), 'rgba(26,20,12,.24)');
+}
+
+// a longer shadow thrown across the ground by something tall
+function castShadow(g, cx, cy, len, wide)
+{
+    var i;
+    for (i = 0; i < 3; i++)
+    {
+        var t = i / 3;
+        pe(g, cx + len * t * .9, cy + len * t * .35,
+            wide * (1 - t * .35), wide * (.42 - t * .12), 'rgba(24,18,10,' + (.2 - t * .05) + ')');
+    }
+}
+
+// ---------- ground edge transitions ----------
+// Two textures butted together in a straight line is the single most amateur
+// looking thing in tile art. Higher-priority ground grows a ragged fringe over
+// its lower-priority neighbour so every boundary is broken up.
+
+var EDGE_PRI = {};
+EDGE_PRI[T_GRASS] = 5;
+EDGE_PRI[T_SAND] = 4;
+EDGE_PRI[T_PATH] = 3;
+EDGE_PRI[T_DIRT] = 2;
+EDGE_PRI[T_STONE] = 1;
+EDGE_PRI[T_WOOD] = 1;
+EDGE_PRI[T_BRIDGE] = 1;
+
+function edgeColorOf(t, season)
+{
+    if (t === T_GRASS)
+    {
+        return SEASON_TINT[season].grass;
+    }
+    if (t === T_SAND)
+    {
+        return '#ddcb9a';
+    }
+    if (t === T_PATH)
+    {
+        return '#a68c66';
+    }
+    if (t === T_DIRT)
+    {
+        return '#7a5636';
+    }
+    return null;
+}
+
+// side: 0 top, 1 right, 2 bottom, 3 left
+function drawFringe(g, px, py, side, col, t, season, seed)
+{
+    var i, depth, x, y;
+    var grassy = (t === T_GRASS);
+    for (i = 0; i < TILE; i++)
+    {
+        // jagged inner boundary, 3..9 px deep
+        depth = 3 + Math.floor(hash2(i, seed, side * 17 + 3) * 5)
+            + (Math.sin((i + seed) * .7) > .3 ? 2 : 0);
+        var d2;
+        for (d2 = 0; d2 < depth; d2++)
+        {
+            if (side === 0) { x = px + i; y = py + d2; }
+            else if (side === 2) { x = px + i; y = py + TILE - 1 - d2; }
+            else if (side === 3) { x = px + d2; y = py + i; }
+            else { x = px + TILE - 1 - d2; y = py + i; }
+            var c = col;
+            if (d2 === depth - 1)
+            {
+                c = tone(col, -1.2);
+            }
+            else if (d2 === 0)
+            {
+                c = tone(col, .7);
+            }
+            pr(g, x, y, 1, 1, c);
+        }
+        // detached specks just past the fringe
+        if (hash2(i, seed + 5, side) > .82)
+        {
+            var e = depth + 1 + Math.floor(hash2(i, side, seed) * 3);
+            if (side === 0) { x = px + i; y = py + e; }
+            else if (side === 2) { x = px + i; y = py + TILE - 1 - e; }
+            else if (side === 3) { x = px + e; y = py + i; }
+            else { x = px + TILE - 1 - e; y = py + i; }
+            pr(g, x, y, 1, 1, tone(col, -.6));
+        }
+    }
+    // grass throws a few blades over the edge so the seam disappears
+    if (grassy && season !== 'winter')
+    {
+        for (i = 0; i < 5; i++)
+        {
+            var o = 3 + Math.floor(hash2(i, seed, side + 11) * 26);
+            if (side === 0) { tuft(g, px + o, py + 8 + Math.floor(hash2(i, 2, seed) * 4), 5, col, seed + i); }
+            else if (side === 2) { tuft(g, px + o, py + TILE - 2, 6, col, seed + i); }
+            else if (side === 3) { tuft(g, px + 5 + Math.floor(hash2(i, 3, seed) * 4), py + o, 5, col, seed + i); }
+            else { tuft(g, px + TILE - 5 - Math.floor(hash2(i, 4, seed) * 4), py + o, 5, col, seed + i); }
+        }
+    }
 }
 
 // ---------- outline post-pass ----------
@@ -2548,7 +2650,7 @@ function outlineColorOf(r, g, b)
     {
         return hit;
     }
-    var hex = tone(rgb2hex(r, g, b), -2.6);
+    var hex = tone(rgb2hex(r, g, b), -3.4);
     var v = hex2rgb(hex);
     OUT_CACHE[key] = v;
     return v;
@@ -2658,109 +2760,137 @@ function drawPerson(g, o, dir, frame)
 
     contactShadow(g, 16, 50, 9, 3);
 
-    // ---- legs (y 37..49) ----
-    var legTop = 37 + bob;
+    // Proportions: head+hair ~19px, body ~29px. The first pass made the head
+    // almost half the sprite, which reads as a bobblehead toy.
+    // ---- legs (y 34..50) ----
+    var legTop = 34 + bob;
     var lx = 10, rx = 17;
-    var lLen = 10 + (step > 0 ? -2 : 0);
-    var rLen = 10 + (step < 0 ? -2 : 0);
+    var lLen = 12 + (step > 0 ? -2 : 0);
+    var rLen = 12 + (step < 0 ? -2 : 0);
     pr(g, lx, legTop, 5, lLen, pants);
     pr(g, rx, legTop, 5, rLen, pants);
     pr(g, lx, legTop, 1, lLen, tone(pants, 1));
     pr(g, rx + 4, legTop, 1, rLen, tone(pants, -1.4));
     pr(g, lx, legTop + lLen - 1, 5, 1, tone(pants, -1.6));
     pr(g, rx, legTop + rLen - 1, 5, 1, tone(pants, -1.6));
+    pr(g, lx + 1, legTop + 3, 1, lLen - 5, tone(pants, -.8));
+    pr(g, rx + 1, legTop + 3, 1, rLen - 5, tone(pants, -.8));
     // shoes
-    pr(g, lx - 1, legTop + lLen, 6, 3, shoe);
-    pr(g, rx, legTop + rLen, 6, 3, shoe);
-    pr(g, lx - 1, legTop + lLen, 6, 1, tone(shoe, 1.1));
-    pr(g, rx, legTop + rLen, 6, 1, tone(shoe, 1.1));
+    pr(g, lx - 1, legTop + lLen, 6, 4, shoe);
+    pr(g, rx, legTop + rLen, 6, 4, shoe);
+    pr(g, lx - 1, legTop + lLen, 6, 1, tone(shoe, 1.2));
+    pr(g, rx, legTop + rLen, 6, 1, tone(shoe, 1.2));
+    pr(g, lx - 1, legTop + lLen + 3, 6, 1, tone(shoe, -1.6));
+    pr(g, rx, legTop + rLen + 3, 6, 1, tone(shoe, -1.6));
 
-    // ---- torso (y 23..38) ----
-    var ty = 23 + bob;
-    pr(g, 8, ty, 16, 15, shirt);
-    pr(g, 8, ty, 3, 15, tone(shirt, .9));         // lit side
-    pr(g, 21, ty, 3, 15, tone(shirt, -1.2));      // shaded side
-    pr(g, 8, ty, 16, 2, tone(shirt, 1.3));        // shoulder top light
-    pr(g, 8, ty + 13, 16, 2, tone(shirt, -1.7));  // hem shadow
+    // ---- torso (y 21..36) ----
+    var ty = 21 + bob;
+    pr(g, 10, ty, 12, 1, shirt);
+    pr(g, 9, ty + 1, 14, 1, shirt);
+    pr(g, 8, ty + 2, 16, 13, shirt);
+    pr(g, 8, ty + 2, 3, 13, tone(shirt, .9));         // lit side
+    pr(g, 21, ty + 2, 3, 13, tone(shirt, -1.2));      // shaded side
+    pr(g, 10, ty, 12, 1, tone(shirt, 1.5));           // shoulder highlight
+    pr(g, 9, ty + 1, 14, 1, tone(shirt, 1.2));
+    pr(g, 8, ty + 13, 16, 2, tone(shirt, -1.7));      // hem shadow
+    // belt
+    pr(g, 8, ty + 11, 16, 3, tone(pants, -.6));
+    pr(g, 8, ty + 11, 16, 1, tone(pants, .9));
+    pr(g, 14, ty + 11, 4, 3, '#d8b048');
+    pr(g, 15, ty + 12, 2, 1, '#8a6a18');
     // fold hints
-    pr(g, 13, ty + 6, 1, 6, tone(shirt, -.7));
-    pr(g, 18, ty + 8, 1, 4, tone(shirt, -.7));
-    // collar
-    pr(g, 12, ty - 1, 8, 2, tone(shirt, -1.9));
-    pr(g, 13, ty, 6, 1, tone(skin, -1.4));
+    pr(g, 13, ty + 5, 1, 6, tone(shirt, -.8));
+    pr(g, 18, ty + 6, 1, 5, tone(shirt, -.8));
+    // collar with a v-notch
+    pr(g, 11, ty, 10, 2, tone(shirt, -1.9));
+    pr(g, 13, ty, 6, 2, tone(skin, -1.2));
+    pr(g, 14, ty + 2, 4, 1, tone(skin, -1.8));
 
     // ---- arms ----
     var swing = step * 2;
     if (dir === 2)
     {
-        pr(g, 12, ty + 2 + swing, 5, 11, shirt);
-        pr(g, 12, ty + 2 + swing, 1, 11, tone(shirt, 1));
-        pr(g, 12, ty + 12 + swing, 5, 4, skin);
-        pr(g, 12, ty + 15 + swing, 5, 1, tone(skin, -1.5));
+        pr(g, 12, ty + 3 + swing, 5, 9, shirt);
+        pr(g, 12, ty + 3 + swing, 1, 9, tone(shirt, 1));
+        pr(g, 12, ty + 11 + swing, 5, 2, tone(shirt, -1.8));   // cuff
+        pr(g, 12, ty + 13 + swing, 5, 4, skin);
+        pr(g, 12, ty + 16 + swing, 5, 1, tone(skin, -1.5));
     }
     else
     {
-        pr(g, 4, ty + 2 - swing, 5, 11, shirt);
-        pr(g, 23, ty + 2 + swing, 5, 11, shirt);
-        pr(g, 4, ty + 2 - swing, 1, 11, tone(shirt, 1));
-        pr(g, 27, ty + 2 + swing, 1, 11, tone(shirt, -1.4));
-        pr(g, 4, ty + 12 - swing, 5, 4, skin);
-        pr(g, 23, ty + 12 + swing, 5, 4, skin);
-        pr(g, 4, ty + 15 - swing, 5, 1, tone(skin, -1.5));
-        pr(g, 23, ty + 15 + swing, 5, 1, tone(skin, -1.5));
+        pr(g, 4, ty + 3 - swing, 5, 9, shirt);
+        pr(g, 23, ty + 3 + swing, 5, 9, shirt);
+        pr(g, 4, ty + 3 - swing, 1, 9, tone(shirt, 1));
+        pr(g, 27, ty + 3 + swing, 1, 9, tone(shirt, -1.4));
+        pr(g, 4, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
+        pr(g, 23, ty + 11 + swing, 5, 2, tone(shirt, -1.8));
+        pr(g, 4, ty + 13 - swing, 5, 4, skin);
+        pr(g, 23, ty + 13 + swing, 5, 4, skin);
+        pr(g, 4, ty + 16 - swing, 5, 1, tone(skin, -1.5));
+        pr(g, 23, ty + 16 + swing, 5, 1, tone(skin, -1.5));
     }
 
-    // ---- head (y 5..23) ----
-    var hy = 5 + bob;
-    // ears
-    pr(g, 5, hy + 9, 3, 5, tone(skin, -.6));
-    pr(g, 24, hy + 9, 3, 5, tone(skin, -1.1));
-    pr(g, 6, hy + 10, 1, 3, tone(skin, -1.8));
-    pr(g, 25, hy + 10, 1, 3, tone(skin, -1.8));
-    // face block with rounded corners
-    pr(g, 7, hy + 1, 18, 17, skin);
-    pr(g, 8, hy, 16, 2, skin);
-    pr(g, 6, hy + 4, 1, 11, skin);
-    pr(g, 25, hy + 4, 1, 11, skin);
-    pr(g, 9, hy + 18, 14, 1, tone(skin, -1.2));
-    pr(g, 10, hy + 19, 12, 1, tone(skin, -1.9));
-    // form shading: lit on the upper left, shadow on the right and under the chin
-    pr(g, 7, hy + 1, 3, 16, tone(skin, .8));
-    pr(g, 22, hy + 1, 3, 17, tone(skin, -1));
-    pr(g, 23, hy + 3, 2, 14, tone(skin, -1.5));
+    // ---- head (y 6..21), 15 rows, tapering to a chin ----
+    var hy = 6 + bob;
+    var spans = [
+        [10, 12], [9, 14],
+        [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16],
+        [9, 14], [10, 12], [12, 8]
+    ];
+    var r;
+    // ears sit behind the face spans
+    pr(g, 6, hy + 7, 3, 4, tone(skin, -.6));
+    pr(g, 23, hy + 7, 3, 4, tone(skin, -1.1));
+    pr(g, 7, hy + 8, 1, 2, tone(skin, -1.8));
+    pr(g, 24, hy + 8, 1, 2, tone(skin, -1.8));
+    for (r = 0; r < spans.length; r++)
+    {
+        pr(g, spans[r][0], hy + r, spans[r][1], 1, skin);
+    }
+    // form shading
+    for (r = 0; r < spans.length; r++)
+    {
+        pr(g, spans[r][0], hy + r, 2, 1, tone(skin, .8));
+        pr(g, spans[r][0] + spans[r][1] - 3, hy + r, 3, 1, tone(skin, -1));
+        pr(g, spans[r][0] + spans[r][1] - 1, hy + r, 1, 1, tone(skin, -1.6));
+    }
+    pr(g, 11, hy + 14, 10, 1, tone(skin, -1.4));
 
     if (dir === 0)
     {
-        // eyes
-        pr(g, 10, hy + 9, 4, 4, '#ffffff');
-        pr(g, 18, hy + 9, 4, 4, '#ffffff');
-        pr(g, 11, hy + 10, 3, 3, eye);
-        pr(g, 19, hy + 10, 3, 3, eye);
-        pr(g, 11, hy + 10, 1, 1, '#ffffff');
-        pr(g, 19, hy + 10, 1, 1, '#ffffff');
-        pr(g, 10, hy + 8, 4, 1, tone(hair, -1));
-        pr(g, 18, hy + 8, 4, 1, tone(hair, -1));
+        pr(g, 10, hy + 7, 4, 4, '#fdfdfa');
+        pr(g, 18, hy + 7, 4, 4, '#fdfdfa');
+        pr(g, 11, hy + 8, 3, 3, eye);
+        pr(g, 19, hy + 8, 3, 3, eye);
+        pr(g, 11, hy + 8, 1, 1, '#ffffff');
+        pr(g, 19, hy + 8, 1, 1, '#ffffff');
+        pr(g, 12, hy + 10, 2, 1, tone(eye, -1.2));
+        pr(g, 20, hy + 10, 2, 1, tone(eye, -1.2));
+        pr(g, 10, hy + 6, 4, 1, tone(hair, -1));
+        pr(g, 18, hy + 6, 4, 1, tone(hair, -1));
         // nose + mouth
-        pr(g, 15, hy + 13, 2, 2, tone(skin, -1.3));
-        pr(g, 14, hy + 16, 4, 1, tone(skin, -2.2));
+        pr(g, 15, hy + 10, 2, 2, tone(skin, -1.3));
+        pr(g, 13, hy + 13, 6, 1, tone(skin, -2.2));
+        pr(g, 14, hy + 14, 4, 1, mix(skin, '#c05a5a', .35));
         if (o.blush !== false)
         {
-            pr(g, 9, hy + 14, 3, 2, mix(skin, '#e07a86', .38));
-            pr(g, 20, hy + 14, 3, 2, mix(skin, '#e07a86', .3));
+            pr(g, 9, hy + 11, 4, 2, mix(skin, '#e07a86', .38));
+            pr(g, 19, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
         }
     }
     else if (dir === 2)
     {
-        pr(g, 18, hy + 9, 4, 4, '#ffffff');
-        pr(g, 19, hy + 10, 3, 3, eye);
-        pr(g, 19, hy + 10, 1, 1, '#ffffff');
-        pr(g, 18, hy + 8, 4, 1, tone(hair, -1));
-        pr(g, 24, hy + 11, 2, 3, tone(skin, -1.2));   // nose in profile
-        pr(g, 21, hy + 16, 4, 1, tone(skin, -2.2));
-        pr(g, 9, hy + 14, 3, 2, mix(skin, '#e07a86', .3));
+        pr(g, 17, hy + 7, 5, 4, '#fdfdfa');
+        pr(g, 18, hy + 8, 3, 3, eye);
+        pr(g, 18, hy + 8, 1, 1, '#ffffff');
+        pr(g, 17, hy + 6, 5, 1, tone(hair, -1));
+        pr(g, 23, hy + 8, 2, 3, skin);              // nose in profile
+        pr(g, 24, hy + 9, 1, 2, tone(skin, -1.4));
+        pr(g, 20, hy + 13, 5, 1, tone(skin, -2.2));
+        pr(g, 9, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
     }
 
-    drawHair(g, o.hairStyle || 'bowl', hair, dir, hy);
+    drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin);
 
     if (o.hat)
     {
@@ -2773,69 +2903,77 @@ function drawPerson(g, o, dir, frame)
     }
 }
 
-function drawHair(g, style, hair, dir, hy)
+function drawHair(g, style, hair, dir, hy, skin)
 {
     var d1 = tone(hair, -1.2), d2 = tone(hair, -2.2);
     var l1 = tone(hair, 1.1), l2 = tone(hair, 2);
 
-    // skull cap
-    pr(g, 7, hy - 3, 18, 8, hair);
-    pr(g, 9, hy - 5, 14, 3, hair);
-    pr(g, 6, hy + 1, 2, 6, hair);
-    pr(g, 24, hy + 1, 2, 6, hair);
-    pr(g, 5, hy + 2, 1, 4, d1);
-    pr(g, 26, hy + 2, 1, 4, d1);
-    // fringe edge shadow onto the forehead
-    pr(g, 7, hy + 4, 18, 1, d2);
-    // specular band (what makes hair read as hair)
-    pr(g, 9, hy - 4, 9, 2, l1);
-    pr(g, 10, hy - 5, 6, 1, l2);
-    pr(g, 19, hy - 3, 4, 1, l1);
+    // skull cap sits ~4px above the head, not 6 - keeps the head from ballooning
+    pr(g, 10, hy - 4, 12, 2, hair);
+    pr(g, 8, hy - 3, 16, 3, hair);
+    pr(g, 7, hy - 1, 18, 4, hair);
+    pr(g, 6, hy + 1, 2, 5, hair);
+    pr(g, 24, hy + 1, 2, 5, hair);
+    pr(g, 5, hy + 2, 1, 3, d1);
+    pr(g, 26, hy + 2, 1, 3, d1);
+    // uneven fringe: the tips of the bangs sit at different heights
+    var fr = [4, 2, 5, 3, 2, 4, 2, 5, 3];
+    var fi;
+    for (fi = 0; fi < fr.length; fi++)
+    {
+        pr(g, 7 + fi * 2, hy, 2, fr[fi], hair);
+        pr(g, 7 + fi * 2, hy + fr[fi], 2, 1, d2);
+    }
+    // specular band (what makes hair read as hair rather than a helmet)
+    pr(g, 9, hy - 3, 9, 2, l1);
+    pr(g, 10, hy - 4, 6, 1, l2);
+    pr(g, 19, hy - 2, 4, 1, l1);
     pr(g, 21, hy + 1, 3, 4, d1);
+    pr(g, 7, hy - 1, 2, 4, l1);
 
     if (style === 'long')
     {
-        pr(g, 4, hy + 2, 3, 18, hair);
-        pr(g, 25, hy + 2, 3, 18, hair);
-        pr(g, 4, hy + 16, 3, 4, d1);
-        pr(g, 25, hy + 16, 3, 4, d1);
-        pr(g, 5, hy + 4, 1, 8, l1);
+        pr(g, 4, hy + 2, 3, 15, hair);
+        pr(g, 25, hy + 2, 3, 15, hair);
+        pr(g, 4, hy + 13, 3, 4, d1);
+        pr(g, 25, hy + 13, 3, 4, d1);
+        pr(g, 5, hy + 4, 1, 7, l1);
     }
     else if (style === 'spiky')
     {
-        pr(g, 7, hy - 6, 4, 4, hair);
+        pr(g, 7, hy - 6, 4, 3, hair);
         pr(g, 13, hy - 8, 4, 5, hair);
-        pr(g, 20, hy - 6, 4, 4, hair);
+        pr(g, 20, hy - 6, 4, 3, hair);
         pr(g, 14, hy - 8, 2, 3, l1);
-        pr(g, 8, hy - 5, 2, 2, l1);
+        pr(g, 8, hy - 6, 2, 2, l1);
     }
     else if (style === 'bun')
     {
-        orb(g, 16, hy - 7, 6, 5, hair, 1.4);
-        pr(g, 12, hy - 4, 8, 2, d1);
+        orb(g, 16, hy - 6, 5, 4, hair, 1.4);
+        pr(g, 12, hy - 3, 8, 2, d1);
     }
     else if (style === 'curly')
     {
         orb(g, 6, hy + 1, 4, 4, hair, 1.2);
         orb(g, 26, hy + 1, 4, 4, hair, 1.2);
-        orb(g, 10, hy - 5, 4, 4, hair, 1.4);
-        orb(g, 22, hy - 5, 4, 4, hair, 1.2);
-        orb(g, 16, hy - 7, 4, 4, hair, 1.4);
+        orb(g, 10, hy - 4, 4, 3, hair, 1.4);
+        orb(g, 22, hy - 4, 4, 3, hair, 1.2);
+        orb(g, 16, hy - 6, 4, 3, hair, 1.4);
     }
     else if (style === 'pony')
     {
-        pr(g, 25, hy - 1, 5, 15, hair);
-        pr(g, 26, hy + 12, 4, 5, d1);
-        pr(g, 25, hy + 1, 2, 7, l1);
+        pr(g, 25, hy - 1, 5, 13, hair);
+        pr(g, 26, hy + 10, 4, 4, d1);
+        pr(g, 25, hy + 1, 2, 6, l1);
         pr(g, 23, hy - 2, 4, 3, d1);
     }
     else if (style === 'wave')
     {
-        pr(g, 4, hy + 2, 3, 12, hair);
-        pr(g, 25, hy + 2, 3, 12, hair);
-        pr(g, 5, hy + 12, 3, 3, d1);
-        pr(g, 24, hy + 12, 3, 3, d1);
-        pr(g, 5, hy + 4, 1, 6, l1);
+        pr(g, 4, hy + 2, 3, 10, hair);
+        pr(g, 25, hy + 2, 3, 10, hair);
+        pr(g, 5, hy + 10, 3, 3, d1);
+        pr(g, 24, hy + 10, 3, 3, d1);
+        pr(g, 5, hy + 4, 1, 5, l1);
     }
     else if (style === 'short')
     {
@@ -2846,14 +2984,27 @@ function drawHair(g, style, hair, dir, hy)
     if (dir === 1)
     {
         // back of the head: hair covers the whole face area
-        pr(g, 7, hy - 3, 18, 20, hair);
-        pr(g, 6, hy + 1, 2, 12, hair);
-        pr(g, 24, hy + 1, 2, 12, hair);
-        pr(g, 9, hy - 5, 14, 3, hair);
-        pr(g, 9, hy + 14, 14, 4, d1);
-        pr(g, 10, hy + 17, 12, 2, d2);
-        pr(g, 9, hy - 4, 9, 3, l1);
-        pr(g, 10, hy - 5, 6, 1, l2);
+        pr(g, 8, hy - 3, 16, 17, hair);
+        pr(g, 7, hy - 1, 18, 13, hair);
+        pr(g, 6, hy + 1, 2, 9, hair);
+        pr(g, 24, hy + 1, 2, 9, hair);
+        pr(g, 10, hy - 4, 12, 2, hair);
+        // nape: shorter strands, then the neck below
+        pr(g, 9, hy + 11, 14, 3, d1);
+        pr(g, 10, hy + 13, 12, 2, d2);
+        pr(g, 12, hy + 14, 8, 2, tone(skin || '#f0c8a0', -1.4));
+        // parting + strand separations so the back of the head is not a flat block
+        pr(g, 15, hy - 4, 2, 15, d2);
+        pr(g, 14, hy - 4, 1, 15, d1);
+        pr(g, 10, hy - 2, 2, 13, d2);
+        pr(g, 19, hy - 2, 2, 13, d2);
+        pr(g, 12, hy - 2, 1, 13, d1);
+        pr(g, 21, hy - 2, 1, 13, d1);
+        pr(g, 8, hy + 2, 1, 9, d2);
+        pr(g, 23, hy + 2, 1, 9, d2);
+        pr(g, 9, hy - 3, 9, 2, l1);
+        pr(g, 10, hy - 4, 6, 1, l2);
+        pr(g, 19, hy - 2, 4, 1, l1);
     }
 }
 
@@ -3066,18 +3217,23 @@ function tileWater(frame, deep)
     });
 }
 
-function tileStoneFloor()
+function tileStoneFloor(variant)
 {
-    return bake('t:sfloor', TILE, TILE, function (g)
+    variant = variant || 0;
+    return bake('t:sfloor:' + variant, TILE, TILE, function (g)
     {
         // warm irregular flagstones. slab tones stay close together on purpose:
         // a big tone gap here reads as a chessboard, not as paving.
         var base = '#a09585';
         pr(g, 0, 0, TILE, TILE, tone(base, -1.8));
-        var slabs = [
-            [1, 1, 17, 13], [19, 1, 12, 13],
-            [1, 15, 12, 16], [14, 15, 17, 9], [14, 25, 17, 6]
+        // four flagstone layouts so a plaza does not read as graph paper
+        var sets = [
+            [[1, 1, 17, 13], [19, 1, 12, 13], [1, 15, 12, 16], [14, 15, 17, 9], [14, 25, 17, 6]],
+            [[1, 1, 11, 15], [13, 1, 18, 9], [13, 11, 18, 12], [1, 17, 15, 14], [17, 24, 14, 7]],
+            [[1, 1, 20, 9], [22, 1, 9, 16], [1, 11, 12, 12], [14, 18, 17, 13], [1, 24, 12, 7]],
+            [[1, 1, 14, 11], [16, 1, 15, 14], [1, 13, 9, 18], [11, 13, 10, 9], [11, 23, 20, 8], [22, 16, 9, 6]]
         ];
+        var slabs = sets[variant % sets.length];
         var i;
         for (i = 0; i < slabs.length; i++)
         {
@@ -3247,6 +3403,10 @@ function sprTree(kind, stage, season)
         var trunk = '#6d4a2c';
         var cx = TREE_W / 2, groundY = TREE_H - 6;
 
+        if (stage >= 3)
+        {
+            castShadow(g, cx + 8, groundY - 2, 26, 20);
+        }
         contactShadow(g, cx, groundY + 1, stage < 2 ? 7 : 18, stage < 2 ? 3 : 6);
 
         if (stage === 0)
@@ -4358,7 +4518,13 @@ function drawBuilding(g, d, kind)
     var wallY = roofH - 8;
     var wall = d.wall, roof = d.roof, trim = d.trim;
 
-    contactShadow(g, W / 2, H - 3, W * .44, 5);
+    // cast shadow along the base, thrown to the right by the top-left light
+    var si;
+    for (si = 0; si < 4; si++)
+    {
+        pr(g, 10 + si * 5, H - 8 + si * 2, W - 12 + si * 6, 4, 'rgba(24,18,10,' + (.17 - si * .035) + ')');
+    }
+    contactShadow(g, W / 2, H - 4, W * .44, 5);
 
     // ---- wall ----
     pr(g, 6, wallY, W - 12, H - wallY - 4, wall);
@@ -4402,7 +4568,15 @@ function drawBuilding(g, d, kind)
         }
         if (y % rowH === 1)
         {
-            pr(g, x0, roofH - y, w0, 1, tone(roof, .9));
+            pr(g, x0, roofH - y, w0, 1, tone(roof, 1.4));
+        }
+        if (y % rowH === 2)
+        {
+            pr(g, x0, roofH - y, w0, 1, tone(roof, .5));
+        }
+        if (y % rowH === rowH - 1)
+        {
+            pr(g, x0, roofH - y, w0, 1, tone(roof, -1.1));
         }
     }
     // shingle tabs
@@ -4413,16 +4587,42 @@ function drawBuilding(g, d, kind)
         var tt = (r2 * rowH) / roofH;
         var ins = Math.round((1 - tt) * (W / 2 - 10));
         var xx;
-        for (xx = ins + 6 + (r2 % 2) * 7; xx < W - ins - 4; xx += 14)
+        for (xx = ins + 5 + (r2 % 2) * 7; xx < W - ins - 4; xx += 14)
         {
-            pr(g, xx, yy, 1, 3, tone(roof, -1.5));
+            pr(g, xx, yy - 1, 2, 5, tone(roof, -2.2));
+            pr(g, xx + 2, yy - 1, 1, 5, tone(roof, .9));
         }
     }
-    // ridge + eaves
-    pr(g, W / 2 - 8, 0, 16, 3, tone(roof, 1.2));
-    pr(g, 0, roofH, W, 5, tone(roof, -1.2));
-    pr(g, 0, roofH, W, 2, tone(roof, .6));
-    pr(g, 0, roofH + 5, W, 2, 'rgba(30,20,10,.3)');
+    // ridge cap
+    pr(g, W / 2 - 9, 0, 18, 4, tone(roof, 1.3));
+    pr(g, W / 2 - 9, 3, 18, 1, tone(roof, -1.4));
+    // eave board with a visible underside: this is what gives the roof depth
+    pr(g, -2, roofH, W + 4, 4, tone(roof, .7));
+    pr(g, -2, roofH, W + 4, 1, tone(roof, 1.6));
+    pr(g, -2, roofH + 4, W + 4, 4, tone(roof, -2.1));       // shaded underside
+    pr(g, -2, roofH + 8, W + 4, 2, 'rgba(24,18,10,.42)');   // shadow onto the wall
+    // rafter tails poking out below the eave
+    for (i = 4; i < W - 4; i += 16)
+    {
+        pr(g, i, roofH + 4, 3, 5, tone(roof, -2.4));
+    }
+    // chimney (skip the tiny buildings)
+    if (W >= 120 && kind !== 'greenhouse' && kind !== 'silo' && kind !== 'well')
+    {
+        var chx = Math.round(W * .74);
+        var chTop = Math.round(roofH * .34);
+        pr(g, chx, chTop, 18, roofH - chTop + 6, '#8a6a5a');
+        pr(g, chx, chTop, 6, roofH - chTop + 6, '#a08272');
+        pr(g, chx + 14, chTop, 4, roofH - chTop + 6, '#6a4e40');
+        var cr;
+        for (cr = chTop + 4; cr < roofH; cr += 6)
+        {
+            pr(g, chx, cr, 18, 1, '#6a4e40');
+        }
+        pr(g, chx - 3, chTop - 5, 24, 6, '#7a5e4e');
+        pr(g, chx - 3, chTop - 5, 24, 2, '#9c8070');
+        pr(g, chx + 3, chTop - 8, 12, 3, '#2e2620');
+    }
 
     // ---- door ----
     var dw = Math.max(26, Math.round(W * .16));
@@ -4441,6 +4641,13 @@ function drawBuilding(g, d, kind)
     pr(g, dx + 6, dy + Math.round(dh * .5) + 1, dw - 12, Math.round(dh * .35) - 2, tone(trim, -1));
     // knob
     pr(g, dx + dw - 8, dy + Math.round(dh * .5) - 2, 3, 3, '#efc95c');
+    pr(g, dx + dw - 8, dy + Math.round(dh * .5) - 2, 1, 1, '#fff0b8');
+    // porch step
+    pr(g, dx - 8, H - 10, dw + 16, 5, '#a09585');
+    pr(g, dx - 8, H - 10, dw + 16, 2, '#bcb2a2');
+    pr(g, dx - 11, H - 6, dw + 22, 5, '#948a7c');
+    pr(g, dx - 11, H - 6, dw + 22, 2, '#aca294');
+    pr(g, dx - 11, H - 2, dw + 22, 2, '#6e675d');
 
     // ---- windows ----
     function win(wx, wy, ww, wh)
@@ -5065,8 +5272,9 @@ var MAPS = {
             { x: 50, y: 0, w: 2, h: 44, t: T_CLIFF },
             { x: 3, y: 30, w: 12, h: 9, t: T_WATER },
             { x: 5, y: 32, w: 8, h: 5, t: T_DEEP },
-            { x: 16, y: 4, w: 20, h: 3, t: T_PATH },
-            { x: 24, y: 6, w: 3, h: 16, t: T_PATH }
+            { x: 16, y: 4, w: 20, h: 2, t: T_PATH },
+            { x: 24, y: 5, w: 2, h: 17, t: T_PATH },
+            { x: 18, y: 21, w: 8, h: 2, t: T_PATH }
         ],
         b: [
             { kind: 'house', x: 18, y: 3, tw: 6, th: 6, door: 3, warp: 'farmhouse' },
@@ -5088,7 +5296,8 @@ var MAPS = {
             { kind: 'stone', n: 26 },
             { kind: 'weed', n: 40 },
             { kind: 'wood', n: 18 },
-            { kind: 'grass', n: 30 }
+            { kind: 'grass', n: 90 },
+            { kind: 'flower', n: 26 }
         ]
     },
 
@@ -5102,9 +5311,9 @@ var MAPS = {
             { x: 0, y: 20, w: 3, h: 8, t: T_PATH },
             { x: 36, y: 2, w: 4, h: 42, t: T_WATER },
             { x: 37, y: 3, w: 2, h: 40, t: T_DEEP },
-            { x: 4, y: 20, w: 34, h: 4, t: T_PATH },
-            { x: 20, y: 8, w: 4, h: 30, t: T_PATH },
-            { x: 40, y: 20, w: 20, h: 4, t: T_PATH },
+            { x: 4, y: 20, w: 34, h: 3, t: T_PATH },
+            { x: 20, y: 8, w: 3, h: 30, t: T_PATH },
+            { x: 40, y: 20, w: 20, h: 3, t: T_PATH },
             { x: 36, y: 20, w: 4, h: 4, t: T_BRIDGE },
             { x: 36, y: 33, w: 4, h: 3, t: T_BRIDGE },
             { x: 14, y: 16, w: 16, h: 12, t: T_STONE },
@@ -5133,10 +5342,11 @@ var MAPS = {
             { x: 2, y: 38, w: 1, h: 5, to: 'forest', tx: 48, ty: 20 }
         ],
         sc: [
-            { kind: 'tree', n: 20, avoid: [{ x: 4, y: 4, w: 52, h: 24 }] },
+            { kind: 'tree', n: 24, avoid: [{ x: 4, y: 4, w: 52, h: 24 }] },
             { kind: 'weed', n: 16 },
-            { kind: 'grass', n: 14 },
-            { kind: 'flower', n: 12 }
+            { kind: 'grass', n: 80 },
+            { kind: 'flower', n: 40 },
+            { kind: 'bush', n: 8 }
         ]
     },
 
@@ -5149,8 +5359,8 @@ var MAPS = {
             { x: 52, y: 0, w: 2, h: 46, t: T_CLIFF },
             { x: 4, y: 26, w: 20, h: 16, t: T_WATER },
             { x: 7, y: 29, w: 14, h: 10, t: T_DEEP },
-            { x: 20, y: 2, w: 8, h: 20, t: T_PATH },
-            { x: 24, y: 20, w: 26, h: 3, t: T_PATH }
+            { x: 22, y: 2, w: 3, h: 20, t: T_PATH },
+            { x: 24, y: 20, w: 26, h: 2, t: T_PATH }
         ],
         b: [
             { kind: 'shop', x: 34, y: 8, tw: 6, th: 5, door: 3, warp: 'ranch', sign: '마니 목장' },
@@ -5166,11 +5376,11 @@ var MAPS = {
         ],
         sc: [
             { kind: 'tree', n: 70, avoid: [{ x: 20, y: 2, w: 10, h: 22 }] },
-            { kind: 'bush', n: 16 },
+            { kind: 'bush', n: 22 },
             { kind: 'stone', n: 14 },
             { kind: 'weed', n: 34 },
-            { kind: 'grass', n: 40 },
-            { kind: 'flower', n: 20 }
+            { kind: 'grass', n: 110 },
+            { kind: 'flower', n: 55 }
         ]
     },
 
@@ -5194,7 +5404,8 @@ var MAPS = {
         ],
         sc: [
             { kind: 'beachforage', n: 10 },
-            { kind: 'stone', n: 6 },
+            { kind: 'stone', n: 10 },
+            { kind: 'grass', n: 22 },
             { kind: 'tree', n: 4, avoid: [{ x: 0, y: 6, w: 56, h: 22 }] }
         ]
     },
@@ -5209,9 +5420,9 @@ var MAPS = {
             { x: 26, y: 8, w: 20, h: 16, t: T_WATER },
             { x: 29, y: 11, w: 14, h: 10, t: T_DEEP },
             { x: 6, y: 4, w: 16, h: 6, t: T_CLIFF },
-            { x: 4, y: 12, w: 20, h: 3, t: T_PATH },
-            { x: 18, y: 14, w: 4, h: 20, t: T_PATH },
-            { x: 12, y: 8, w: 4, h: 6, t: T_PATH }
+            { x: 4, y: 12, w: 20, h: 2, t: T_PATH },
+            { x: 18, y: 13, w: 3, h: 21, t: T_PATH },
+            { x: 12, y: 8, w: 4, h: 5, t: T_PATH }
         ],
         b: [
             { kind: 'shop', x: 4, y: 20, tw: 6, th: 5, door: 3, warp: 'carpenter', sign: '목공소' },
@@ -5229,7 +5440,8 @@ var MAPS = {
             { kind: 'tree', n: 26, avoid: [{ x: 4, y: 10, w: 22, h: 26 }] },
             { kind: 'stone', n: 34 },
             { kind: 'weed', n: 20 },
-            { kind: 'grass', n: 18 }
+            { kind: 'grass', n: 70 },
+            { kind: 'flower', n: 22 }
         ]
     }
 };
@@ -5761,7 +5973,7 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_STONE)
                 {
-                    img = tileStoneFloor();
+                    img = tileStoneFloor(Math.floor(hash2(x, y, 53) * 4));
                 }
                 else if (t === T_WOOD || t === T_BRIDGE)
                 {
@@ -5808,6 +6020,37 @@ function groundCanvas(m, season, waterFrame)
                 if (img)
                 {
                     g.drawImage(img, x * TILE, y * TILE);
+                }
+            }
+        }
+        // second pass: let higher-priority ground grow over its neighbours so no
+        // two materials ever meet in a straight line
+        for (y = 0; y < m.h; y++)
+        {
+            for (x = 0; x < m.w; x++)
+            {
+                var me = m.tiles[y * m.w + x];
+                var myPri = EDGE_PRI[me];
+                if (myPri === undefined)
+                {
+                    continue;
+                }
+                var nx = [0, 1, 0, -1], ny = [-1, 0, 1, 0];
+                var s;
+                for (s = 0; s < 4; s++)
+                {
+                    var nt = tileAt(m, x + nx[s], y + ny[s]);
+                    var np = EDGE_PRI[nt];
+                    if (np === undefined || np <= myPri)
+                    {
+                        continue;
+                    }
+                    var col = edgeColorOf(nt, season);
+                    if (!col)
+                    {
+                        continue;
+                    }
+                    drawFringe(g, x * TILE, y * TILE, s, col, nt, season, (x * 31 + y * 17 + s) | 0);
                 }
             }
         }
@@ -6082,29 +6325,55 @@ function drawBoard(g, x, y)
 
 function drawFountain(g, x, y, tick)
 {
-    var s = '#938f88';
-    pr(g, x, y, TILE * 4, TILE * 3, s);
-    pr(g, x, y, TILE * 4, 4, tone(s, 1.3));
-    pr(g, x, y + TILE * 3 - 5, TILE * 4, 5, tone(s, -1.8));
-    pr(g, x + 8, y + 12, TILE * 4 - 16, TILE * 3 - 24, '#2f6ea8');
-    pr(g, x + 8, y + 12, TILE * 4 - 16, 3, '#4f92ce');
+    var s = '#a3998c';
+    var W = TILE * 4, H = TILE * 3;
+    // outer rim with a bevel
+    pr(g, x, y + 4, W, H - 4, tone(s, -1.4));
+    pr(g, x + 2, y + 2, W - 4, H - 6, s);
+    pr(g, x + 2, y + 2, W - 4, 4, tone(s, 1.4));
+    pr(g, x + 2, y + H - 10, W - 4, 4, tone(s, -1.8));
     var i;
+    for (i = 0; i < 8; i++)
+    {
+        pr(g, x + 4 + i * 15, y + 2, 1, H - 8, tone(s, -1));
+    }
+    // water basin
+    var bx = x + 12, by = y + 14, bw = W - 24, bh = H - 34;
+    pr(g, bx - 3, by - 3, bw + 6, bh + 6, tone(s, -2));
+    pr(g, bx, by, bw, bh, '#2f74b2');
+    pr(g, bx, by, bw, 3, '#1e4a76');
     for (i = 0; i < 4; i++)
     {
-        pr(g, x + 12 + ((tick * .4 + i * 20) % (TILE * 4 - 40)), y + 22 + i * 14, 16, 2, '#54a0d8');
+        var wy = by + 5 + i * 7;
+        var wx = bx + 3 + ((tick * .5 + i * 19) % (bw - 20));
+        pr(g, wx, wy, 14, 1, '#63a6dc');
+        pr(g, wx + 2, wy + 1, 10, 1, '#3f85c2');
     }
-    pr(g, x + 52, y + 20, 24, 52, s);
-    pr(g, x + 52, y + 20, 8, 52, tone(s, 1.1));
-    pr(g, x + 70, y + 20, 6, 52, tone(s, -1.4));
-    pr(g, x + 58, y - 10, 12, 32, tone(s, .8));
-    pe(g, x + 64, y - 12, 9, 5, tone(s, 1.4));
-    for (i = 0; i < 10; i++)
+    pr(g, bx, by + bh - 2, bw, 2, '#255f92');
+    // centre pillar + bowl
+    pr(g, x + 52, y + 20, 24, 40, s);
+    pr(g, x + 52, y + 20, 8, 40, tone(s, 1.1));
+    pr(g, x + 70, y + 20, 6, 40, tone(s, -1.5));
+    pe(g, x + 64, y + 18, 17, 6, tone(s, 1.3));
+    pe(g, x + 64, y + 17, 13, 4, '#3f85c2');
+    pr(g, x + 60, y - 6, 8, 26, tone(s, .6));
+    pr(g, x + 60, y - 6, 3, 26, tone(s, 1.5));
+    pe(g, x + 64, y - 8, 8, 4, tone(s, 1.4));
+    // spout arcs
+    for (i = 0; i < 14; i++)
     {
-        var a = (tick * .09 + i * .8) % 8;
-        var px = x + 64 + Math.round(Math.cos(i * 1.9) * a * 4);
-        var py = y - 14 + Math.round(a * 5);
-        pr(g, px, py, 2, 3, 'rgba(190,228,255,.85)');
+        var a = (tick * .12 + i * .55) % 7;
+        var side = (i % 2) ? 1 : -1;
+        var px = x + 64 + Math.round(side * a * 3.4);
+        var py = y - 10 + Math.round(a * a * .9);
+        pr(g, px, py, 2, 3, 'rgba(190,228,255,.9)');
+        if (i % 3 === 0)
+        {
+            pr(g, px, py + 3, 1, 2, 'rgba(255,255,255,.6)');
+        }
     }
+    // splash ring
+    pe(g, x + 64, y + 16, 10 + (tick % 20) * .2, 3, 'rgba(255,255,255,.14)');
 }
 
 function drawMineEntrance(g, x, y)
@@ -6331,7 +6600,7 @@ function newGame(name, farmName)
         gold: 500,
         energy: BASE_ENERGY, maxEnergy: BASE_ENERGY,
         health: BASE_HEALTH, maxHealth: BASE_HEALTH,
-        map: 'farmhouse', px: 8 * TILE, py: 8 * TILE, dir: 0,
+        map: 'farmhouse', px: 6 * TILE + HALF, py: 9 * TILE + HALF, dir: 0,
         inv: [
             { id: 'hoe', n: 1 }, { id: 'can', n: 1 }, { id: 'axe', n: 1 },
             { id: 'pick', n: 1 }, { id: 'scythe', n: 1 },
@@ -6371,8 +6640,8 @@ function newGame(name, farmName)
     rollWeather();
     MAP_CACHE = {};
     MAP = buildMap('farmhouse');
-    S.px = 8 * TILE;
-    S.py = 8 * TILE;
+    S.px = 6 * TILE + HALF;
+    S.py = 9 * TILE + HALF;
     return S;
 }
 
@@ -7135,8 +7404,8 @@ function endDay(fainted, lostGold)
     S.health = S.maxHealth;
     S.water = S.waterCap;
     S.map = 'farmhouse';
-    S.px = 8 * TILE;
-    S.py = 8 * TILE;
+    S.px = 6 * TILE + HALF;
+    S.py = 9 * TILE + HALF;
     S.dir = 0;
     UI.collapsing = false;
 
@@ -10650,8 +10919,9 @@ function endFestival()
         S.time = 22 * 60;
         MAP = loadMap('farmhouse');
         S.map = 'farmhouse';
-        S.px = 8 * TILE;
-        S.py = 8 * TILE;
+        S.px = 6 * TILE + HALF;
+        S.py = 9 * TILE + HALF;
+        ensureStandable();
         rebuildActors();
     });
 }
@@ -13049,7 +13319,7 @@ function askName()
         g.clearRect(0, 0, 48, 81);
         SPR_CACHE['p:newlook:0:0'] = null;
         delete SPR_CACHE['p:newlook:0:0'];
-        g.drawImage(personSprite('newlook' + Math.random(), look, 0, 0), 0, 0, 16, 27, 0, 0, 48, 81);
+        g.drawImage(personSprite('newlook' + Math.random(), look, 0, 0), 0, 0, PW, PH, 0, 0, 48, 81);
     }
     redraw();
 
@@ -13125,6 +13395,7 @@ function startPlay()
 {
     hideTitle();
     MAP = loadMap(S.map);
+    ensureStandable();
     rebuildActors();
     UI.lastHudKey = '';
     updateHud();
@@ -13491,6 +13762,50 @@ function canStand(px, py)
     return true;
 }
 
+// Safety net: if the player ends up inside something solid (bad spawn point,
+// a building placed on top of them, a map edit) they can get wedged with no way
+// out, because movePlayer only ever accepts a *fully* clear destination.
+// Spiral out to the nearest standable tile and drop them there.
+function ensureStandable()
+{
+    if (!S || !MAP)
+    {
+        return false;
+    }
+    if (canStand(S.px, S.py))
+    {
+        return false;
+    }
+    var cx = Math.floor(S.px / TILE), cy = Math.floor(S.py / TILE);
+    var r, dx, dy;
+    for (r = 0; r <= 12; r++)
+    {
+        for (dy = -r; dy <= r; dy++)
+        {
+            for (dx = -r; dx <= r; dx++)
+            {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r)
+                {
+                    continue;
+                }
+                var tx = cx + dx, ty = cy + dy;
+                if (tx < 0 || ty < 0 || tx >= MAP.w || ty >= MAP.h)
+                {
+                    continue;
+                }
+                var px = tx * TILE + HALF, py = ty * TILE + HALF;
+                if (canStand(px, py))
+                {
+                    S.px = px;
+                    S.py = py;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 function facingTile()
 {
     var tx = Math.floor(S.px / TILE);
@@ -13553,6 +13868,7 @@ function checkWarp()
                 S.py = target.ty * TILE + HALF;
             }
         }
+        ensureStandable();
         rebuildActors();
         UI.lastHudKey = '';
         setTimeout(function ()
