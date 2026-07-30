@@ -1192,7 +1192,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.0';
+var GAME_VER = '2.1';
 
 // ---------- core constants ----------
 
@@ -2343,8 +2343,14 @@ function rotToward(h, target, deg)
 
 var TONE_CACHE = {};
 
-// step < 0 -> shadow (hue toward blue, more saturated, darker)
-// step > 0 -> highlight (hue toward warm yellow, less saturated, lighter)
+// step < 0 -> shadow (hue drifts cool, darker)
+// step > 0 -> highlight (hue drifts warm, lighter)
+//
+// HSL saturation is relative to lightness, so naively keeping s while dropping l
+// multiplies the actual colourfulness: pale skin #f0c8a0 used to shade to #ed0f11
+// and white milk #f8f8f0 to #a9d67f. Preserve chroma -- s * (1 - |2l-1|) -- and
+// solve for s at the new lightness instead. Hue drift is also capped, because a
+// 30-degree swing reads as a different material rather than as shading.
 function tone(hex, step)
 {
     if (!step)
@@ -2364,22 +2370,25 @@ function tone(hex, step)
     if (s < .06)
     {
         // greys still get a colour cast so they do not read as flat concrete
-        h = step < 0 ? 225 : 45;
-        s = .05 + .035 * k;
+        h = step < 0 ? 228 : 44;
+        s = .05 + .03 * k;
     }
+    var chroma = s * (1 - Math.abs(2 * l - 1));
+    var l2, s2;
     if (step < 0)
     {
-        h = rotToward(h, 235, 9 * k);
-        s = Math.min(1, s + .045 * k);
-        l = Math.max(.02, l - .085 * k);
+        h = rotToward(h, 235, Math.min(22, 4.5 * k));
+        l2 = Math.max(.03, l - .085 * k);
+        s2 = Math.min(.88, s + .26, chroma / Math.max(.10, 1 - Math.abs(2 * l2 - 1)));
     }
     else
     {
-        h = rotToward(h, 48, 7 * k);
-        s = Math.max(0, s - .04 * k);
-        l = Math.min(.98, l + .095 * k);
+        h = rotToward(h, 48, Math.min(20, 4 * k));
+        l2 = Math.min(.98, l + .095 * k);
+        // highlights lose a little colour on the way to the light
+        s2 = Math.min(s, chroma * .9 / Math.max(.10, 1 - Math.abs(2 * l2 - 1)));
     }
-    var out = hsl2rgb(h, s, l);
+    var out = hsl2rgb(h, Math.max(0, s2), l2);
     var res = rgb2hex(out[0], out[1], out[2]);
     TONE_CACHE[key] = res;
     return res;
@@ -2558,14 +2567,9 @@ function castShadow(g, cx, cy, len, wide)
 // looking thing in tile art. Higher-priority ground grows a ragged fringe over
 // its lower-priority neighbour so every boundary is broken up.
 
+// which ground grows over which. filled in world.js, next to the T_* constants:
+// this file is bundled first, so the constants are not assigned yet here.
 var EDGE_PRI = {};
-EDGE_PRI[T_GRASS] = 5;
-EDGE_PRI[T_SAND] = 4;
-EDGE_PRI[T_PATH] = 3;
-EDGE_PRI[T_DIRT] = 2;
-EDGE_PRI[T_STONE] = 1;
-EDGE_PRI[T_WOOD] = 1;
-EDGE_PRI[T_BRIDGE] = 1;
 
 function edgeColorOf(t, season)
 {
@@ -2575,7 +2579,7 @@ function edgeColorOf(t, season)
     }
     if (t === T_SAND)
     {
-        return '#ddcb9a';
+        return '#dcbd7e';
     }
     if (t === T_PATH)
     {
@@ -2593,11 +2597,13 @@ function drawFringe(g, px, py, side, col, t, season, seed)
 {
     var i, depth, x, y;
     var grassy = (t === T_GRASS);
+    // step the depth in 3px lobes. varying it every single pixel made the
+    // boundary read as fur, which was very obvious where snow met a dirt path.
     for (i = 0; i < TILE; i++)
     {
-        // jagged inner boundary, 3..9 px deep
-        depth = 3 + Math.floor(hash2(i, seed, side * 17 + 3) * 5)
-            + (Math.sin((i + seed) * .7) > .3 ? 2 : 0);
+        var lobe = Math.floor(i / 3);
+        depth = 2 + Math.floor(hash2(lobe, seed, side * 17 + 3) * 4)
+            + (Math.sin((lobe + seed) * 1.1) > .3 ? 2 : 0);
         var d2;
         for (d2 = 0; d2 < depth; d2++)
         {
@@ -2610,14 +2616,14 @@ function drawFringe(g, px, py, side, col, t, season, seed)
             {
                 c = tone(col, -1.2);
             }
-            else if (d2 === 0)
+            else if (d2 === 0 && hash2(lobe, seed + 1, side + 7) > .55)
             {
                 c = tone(col, .7);
             }
             pr(g, x, y, 1, 1, c);
         }
         // detached specks just past the fringe
-        if (hash2(i, seed + 5, side) > .82)
+        if (hash2(i, seed + 5, side) > .9)
         {
             var e = depth + 1 + Math.floor(hash2(i, side, seed) * 3);
             if (side === 0) { x = px + i; y = py + e; }
@@ -2760,6 +2766,11 @@ function drawPerson(g, o, dir, frame)
 
     // frames 0-3 are the walk cycle; 4-6 are tool poses (wind up / strike / recover)
     var act = frame >= 4 ? (frame - 4) : -1;
+    // 29 villagers sharing one body read as recolours of the same person.
+    // tall shifts the head/torso up while the feet stay anchored; wide thickens
+    // the torso. Small ranges on purpose - variety, not deformity.
+    var tall = Math.max(-2, Math.min(2, o.tall || 0));
+    var wide = Math.max(0, Math.min(2, o.wide || 0));
     var step = (frame === 1) ? 1 : ((frame === 3) ? -1 : 0);
     var bob = (frame === 1 || frame === 3) ? -1 : 0;
     if (act >= 0)
@@ -2774,10 +2785,10 @@ function drawPerson(g, o, dir, frame)
     // Proportions: head+hair ~19px, body ~29px. The first pass made the head
     // almost half the sprite, which reads as a bobblehead toy.
     // ---- legs (y 34..50) ----
-    var legTop = 34 + bob;
+    var legTop = 34 - tall + bob;
     var lx = 10, rx = 17;
-    var lLen = 12 + (step > 0 ? -2 : 0);
-    var rLen = 12 + (step < 0 ? -2 : 0);
+    var lLen = 12 + tall + (step > 0 ? -2 : 0);
+    var rLen = 12 + tall + (step < 0 ? -2 : 0);
     if (act >= 0)
     {
         // braced stance: feet wider apart
@@ -2801,19 +2812,20 @@ function drawPerson(g, o, dir, frame)
     pr(g, rx, legTop + rLen + 3, 6, 1, tone(shoe, -1.6));
 
     // ---- torso (y 21..36) ----
-    var ty = 21 + bob;
+    var ty = 21 - tall + bob;
     var tl = (act >= 0 && dir === 2) ? lean : 0;   // sideways lean reads best in profile
-    pr(g, 10 + tl, ty, 12, 1, shirt);
-    pr(g, 9 + tl, ty + 1, 14, 1, shirt);
-    pr(g, 8 + tl, ty + 2, 16, 13, shirt);
-    pr(g, 8, ty + 2, 3, 13, tone(shirt, .9));         // lit side
-    pr(g, 21, ty + 2, 3, 13, tone(shirt, -1.2));      // shaded side
-    pr(g, 10, ty, 12, 1, tone(shirt, 1.5));           // shoulder highlight
-    pr(g, 9, ty + 1, 14, 1, tone(shirt, 1.2));
-    pr(g, 8, ty + 13, 16, 2, tone(shirt, -1.7));      // hem shadow
+    var bx = 8 - wide, bw = 16 + wide * 2;
+    pr(g, bx + 2 + tl, ty, bw - 4, 1, shirt);
+    pr(g, bx + 1 + tl, ty + 1, bw - 2, 1, shirt);
+    pr(g, bx + tl, ty + 2, bw, 13, shirt);
+    pr(g, bx, ty + 2, 3, 13, tone(shirt, .9));                 // lit side
+    pr(g, bx + bw - 3, ty + 2, 3, 13, tone(shirt, -1.2));      // shaded side
+    pr(g, bx + 2, ty, bw - 4, 1, tone(shirt, 1.5));            // shoulder highlight
+    pr(g, bx + 1, ty + 1, bw - 2, 1, tone(shirt, 1.2));
+    pr(g, bx, ty + 13, bw, 2, tone(shirt, -1.7));              // hem shadow
     // belt
-    pr(g, 8, ty + 11, 16, 3, tone(pants, -.6));
-    pr(g, 8, ty + 11, 16, 1, tone(pants, .9));
+    pr(g, bx, ty + 11, bw, 3, tone(pants, -.6));
+    pr(g, bx, ty + 11, bw, 1, tone(pants, .9));
     pr(g, 14, ty + 11, 4, 3, '#d8b048');
     pr(g, 15, ty + 12, 2, 1, '#8a6a18');
     // fold hints
@@ -2862,20 +2874,21 @@ function drawPerson(g, o, dir, frame)
     }
     else
     {
-        pr(g, 4, ty + 3 - swing, 5, 9, shirt);
-        pr(g, 23, ty + 3 + swing, 5, 9, shirt);
-        pr(g, 4, ty + 3 - swing, 1, 9, tone(shirt, 1));
-        pr(g, 27, ty + 3 + swing, 1, 9, tone(shirt, -1.4));
-        pr(g, 4, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
-        pr(g, 23, ty + 11 + swing, 5, 2, tone(shirt, -1.8));
-        pr(g, 4, ty + 13 - swing, 5, 4, skin);
-        pr(g, 23, ty + 13 + swing, 5, 4, skin);
-        pr(g, 4, ty + 16 - swing, 5, 1, tone(skin, -1.5));
-        pr(g, 23, ty + 16 + swing, 5, 1, tone(skin, -1.5));
+        var alx = 4 - wide, arx = 23 + wide;
+        pr(g, alx, ty + 3 - swing, 5, 9, shirt);
+        pr(g, arx, ty + 3 + swing, 5, 9, shirt);
+        pr(g, alx, ty + 3 - swing, 1, 9, tone(shirt, 1));
+        pr(g, arx + 4, ty + 3 + swing, 1, 9, tone(shirt, -1.4));
+        pr(g, alx, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
+        pr(g, arx, ty + 11 + swing, 5, 2, tone(shirt, -1.8));
+        pr(g, alx, ty + 13 - swing, 5, 4, skin);
+        pr(g, arx, ty + 13 + swing, 5, 4, skin);
+        pr(g, alx, ty + 16 - swing, 5, 1, tone(skin, -1.5));
+        pr(g, arx, ty + 16 + swing, 5, 1, tone(skin, -1.5));
     }
 
     // ---- head (y 6..21), 15 rows, tapering to a chin ----
-    var hy = 6 + bob;
+    var hy = 6 - tall + bob;
     var hl = (act >= 0 && dir === 2) ? lean : 0;
     var spans = [
         [10, 12], [9, 14],
@@ -3055,7 +3068,7 @@ function drawHair(g, style, hair, dir, hy, skin)
 
 function personSprite(key, opt, dir, frame)
 {
-    return bake('p:' + key + ':' + dir + ':' + frame, PW, PH, function (g)
+    return bake('p:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' + dir + ':' + frame, PW, PH, function (g)
     {
         drawPerson(g, opt, dir, frame);
     }, { outline: true });
@@ -3072,28 +3085,29 @@ function tileGrass(season, variant)
         var i;
         // 1) flat base, 2) irregular darker patches, 3) dithered seams, 4) blade clusters
         pr(g, 0, 0, TILE, TILE, a);
-        for (i = 0; i < 3; i++)
+        for (i = 0; i < 6; i++)
         {
-            var bx = Math.floor(hash2(variant, i, 131) * TILE) - 6;
-            var by = Math.floor(hash2(i, variant, 137) * TILE) - 6;
-            var bw = 10 + Math.floor(hash2(i, i, variant + 3) * 14);
-            var bh = 8 + Math.floor(hash2(variant, i, 149) * 12);
-            pe(g, bx + bw / 2, by + bh / 2, bw / 2, bh / 2, b);
+            var bx = Math.floor(hash2(variant, i, 131) * TILE) - 3;
+            var by = Math.floor(hash2(i, variant, 137) * TILE) - 3;
+            var bw = 6 + Math.floor(hash2(i, i, variant + 3) * 6);
+            var bh = 5 + Math.floor(hash2(variant, i, 149) * 5);
+            // alternate darker and lighter so no variant is brighter overall
+            var pc = (i % 2) ? b : tone(a, .7);
+            pe(g, bx + bw / 2, by + bh / 2, bw / 2, bh / 2, pc);
             dither(g, Math.max(0, bx), Math.max(0, by),
-                Math.min(TILE - Math.max(0, bx), bw), Math.min(TILE - Math.max(0, by), bh), b, a, .45);
+                Math.min(TILE - Math.max(0, bx), bw), Math.min(TILE - Math.max(0, by), bh), pc, a, .45);
         }
         if (season === 'winter')
         {
             pr(g, 0, 0, TILE, TILE, '#dde8f2');
             // wind-blown drifts: lit crest, blue-shadowed lee side
-            for (i = 0; i < 3; i++)
+            for (i = 0; i < 5; i++)
             {
-                var dx = Math.floor(hash2(variant, i, 41) * TILE) - 8;
-                var dy = Math.floor(hash2(i, variant, 57) * TILE) - 4;
-                var dw = 12 + Math.floor(hash2(i, i, variant) * 14);
-                pe(g, dx + dw / 2, dy + 4, dw / 2, 4, '#f2f8fd');
-                pe(g, dx + dw / 2, dy + 6, dw / 2 - 1, 3, '#c6d6e6');
-                pr(g, Math.max(0, dx + 2), dy + 1, Math.min(dw - 4, TILE), 1, '#ffffff');
+                var dx = Math.floor(hash2(variant, i, 41) * TILE) - 3;
+                var dy = Math.floor(hash2(i, variant, 57) * TILE) - 2;
+                var dw = 7 + Math.floor(hash2(i, i, variant) * 6);
+                pe(g, dx + dw / 2, dy + 3, dw / 2, 2, '#f2f8fd');
+                pe(g, dx + dw / 2, dy + 5, dw / 2 - 1, 2, '#c6d6e6');
             }
             dither(g, 0, 0, TILE, TILE, '#e9f2f8', '#cfdde9', .35);
             // dead grass and twigs poking through
@@ -3142,15 +3156,35 @@ function tileGrass(season, variant)
     });
 }
 
-function tileDirt(season)
+function tileDirt(season, variant)
 {
-    return bake('t:dirt:' + season, TILE, TILE, function (g)
+    variant = variant || 0;
+    return bake('t:dirt:' + season + ':' + variant, TILE, TILE, function (g)
     {
-        var base = '#7a5636';
-        dither(g, 0, 0, TILE, TILE, base, tone(base, -.9), .4);
-        crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.2), tone(base, -1.5), tone(base, -2.2)], 22, 13);
-        pr(g, 0, 0, TILE, 1, tone(base, .8));
-        pr(g, 0, TILE - 1, TILE, 1, tone(base, -1.6));
+        // the first version banded into horizontal corduroy over a large area.
+        // irregular patches + clustered grit instead of rows.
+        var base = '#7c5735';
+        pr(g, 0, 0, TILE, TILE, base);
+        var i;
+        for (i = 0; i < 5; i++)
+        {
+            var bx = Math.floor(hash2(variant, i, 181) * TILE) - 3;
+            var by = Math.floor(hash2(i, variant, 187) * TILE) - 3;
+            // alternate light and dark within every tile so no variant ends up
+            // brighter than its neighbours overall
+            var pc = tone(base, i % 2 ? -.7 : .6);
+            pe(g, bx + 4, by + 3, 4, 3, pc);
+            dither(g, Math.max(0, bx), Math.max(0, by), 9, 7, pc, base, .5);
+        }
+        crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.4), tone(base, -1.5), tone(base, -2.3)], 26, variant + 13);
+        // small clods with a lit top
+        for (i = 0; i < 5; i++)
+        {
+            var cx = 2 + Math.floor(hash2(i, variant, 91) * 27);
+            var cy = 2 + Math.floor(hash2(variant, i, 97) * 27);
+            pe(g, cx + 2, cy + 1, 3, 2, tone(base, -1.2));
+            pr(g, cx + 1, cy - 1, 3, 1, tone(base, 1.3));
+        }
     });
 }
 
@@ -3192,57 +3226,77 @@ function tileSand(variant)
     variant = variant || 0;
     return bake('t:sand:' + variant, TILE, TILE, function (g)
     {
-        var base = '#ddcb9a';
+        // warmer and more saturated than the first pass: pale cream over a whole
+        // desert screen read as washed-out paper
+        var base = '#dcbd7e';
         pr(g, 0, 0, TILE, TILE, base);
         // damp patches
         var i;
         for (i = 0; i < 2; i++)
         {
-            var bx = Math.floor(hash2(variant, i, 211) * TILE) - 5;
-            var by = Math.floor(hash2(i, variant, 223) * TILE) - 5;
-            pe(g, bx + 8, by + 6, 9, 6, tone(base, -.8));
-            dither(g, Math.max(0, bx), Math.max(0, by), 16, 12, tone(base, -.8), base, .5);
+            var bx = Math.floor(hash2(variant, i, 211) * TILE) - 3;
+            var by = Math.floor(hash2(i, variant, 223) * TILE) - 3;
+            pe(g, bx + 5, by + 4, 5, 3, tone(base, -.5));
+            dither(g, Math.max(0, bx), Math.max(0, by), 10, 8, tone(base, -.5), base, .55);
         }
         // wind ripples: crest lit, trough shaded
+        // only fine grain here. any feature wider than a few pixels inside a
+        // 32px tile becomes a repeating motif once the tile tiles -- the big
+        // ripples and dunes are drawn map-wide in groundMacro instead.
         for (i = 0; i < 5; i++)
         {
-            var ry = 3 + i * 6 + (variant % 3);
-            var rx = ((i * 9 + variant * 5) % 14);
-            var rw = 14 + ((i * 7) % 12);
-            pr(g, rx, ry, rw, 1, tone(base, 1.5));
-            pr(g, rx + 1, ry + 1, rw - 2, 1, tone(base, -1.2));
-            pr(g, (rx + 18) % TILE, ry + 3, 10, 1, tone(base, 1.2));
-            pr(g, (rx + 18) % TILE, ry + 4, 9, 1, tone(base, -1));
+            var ry = Math.floor(hash2(i, variant, 131) * TILE);
+            var rx = Math.floor(hash2(variant, i, 133) * TILE) - 3;
+            var rw = 4 + Math.floor(hash2(i, variant, 137) * 6);
+            pr(g, Math.max(0, rx), ry, rw, 1, tone(base, .5));
         }
-        crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.8), tone(base, -1.6), tone(base, -2.4)], 30, variant + 19);
-        // shell fragments and pebbles
+        crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.4), tone(base, -1.4), tone(base, -2.1)], 16, variant + 19);
+        // dune shoulders: broad lit crest with a shaded lee side. this is what
+        // stops a big sand area from reading as flat paper
         for (i = 0; i < 3; i++)
+        {
+            var dcx = Math.floor(hash2(variant, i, 141) * TILE);
+            var dcy = Math.floor(hash2(i, variant, 143) * TILE);
+            pe(g, dcx, dcy, 4, 2, tone(base, .45));
+            pe(g, dcx + 1, dcy + 2, 3, 1, tone(base, -.4));
+        }
+        // shell fragments and pebbles. three near-white specks per tile scanned
+        // as evenly scattered confetti, so: fewer, and only on some tiles.
+        var shells = hash2(variant, 5, 67) > .55 ? 2 : 1;
+        for (i = 0; i < shells; i++)
         {
             var sx = 2 + Math.floor(hash2(i, variant, 71) * 27);
             var sy = 2 + Math.floor(hash2(variant, i, 73) * 27);
-            var col = ['#f3ece0', '#d8c0ae', '#c2b08c'][i % 3];
-            pr(g, sx, sy, 2, 1, col);
-            pr(g, sx, sy + 1, 1, 1, tone(col, -1.4));
+            var col = ['#e6dcc8', '#c9a882', '#b09468'][(variant + i) % 3];
+            pe(g, sx + 1, sy + 1, 2, 1, col);
+            pr(g, sx, sy + 2, 3, 1, tone(col, -1.6));
         }
     });
 }
 
-function tileWater(frame, deep)
+function tileWater(frame, deep, variant)
 {
-    return bake('t:water:' + frame + ':' + (deep ? 1 : 0), TILE, TILE, function (g)
+    variant = variant || 0;
+    return bake('t:water:' + frame + ':' + (deep ? 1 : 0) + ':' + variant, TILE, TILE, function (g)
     {
+        // banding at fixed rows plus one shared tile made a lake read as
+        // corduroy. every feature is now offset by a per-position variant.
         var base = deep ? '#1c4a76' : '#2e77b2';
         pr(g, 0, 0, TILE, TILE, base);
-        // depth banding
-        dither(g, 0, 0, TILE, 14, tone(base, .8), base, .5);
-        dither(g, 0, 18, TILE, 14, base, tone(base, -1), .5);
-        // scrolling caustics: bright crest, dark trough underneath
         var i;
-        for (i = 0; i < 5; i++)
+        for (i = 0; i < 3; i++)
         {
-            var y = ((i * 7) + frame * 4) % TILE;
-            var w = 8 + ((i * 5) % 12);
-            var x = ((i * 11) + frame * 6) % TILE;
+            var px2 = Math.floor(hash2(variant, i, 193) * TILE) - 4;
+            var py2 = Math.floor(hash2(i, variant, 197) * TILE) - 4;
+            dither(g, Math.max(0, px2), Math.max(0, py2), 12, 9,
+                tone(base, i % 2 ? -.8 : .7), base, .45);
+        }
+        // scrolling caustics: bright crest, dark trough underneath
+        for (i = 0; i < 4; i++)
+        {
+            var y = (Math.floor(hash2(i, variant, 199) * TILE) + frame * 4) % TILE;
+            var w = 7 + Math.floor(hash2(variant, i, 211) * 11);
+            var x = (Math.floor(hash2(variant, i, 223) * TILE) + frame * 6) % TILE;
             var ww = Math.min(w, TILE - x);
             pr(g, x, y, ww, 1, tone(base, 2.2));
             pr(g, x + 1, y + 1, Math.max(1, ww - 2), 1, tone(base, 1.1));
@@ -3253,12 +3307,15 @@ function tileWater(frame, deep)
                 pr(g, 0, y + 1, Math.max(1, w - ww - 1), 1, tone(base, 1.1));
             }
         }
-        // specular sparkles
-        var sx = (frame * 9 + 3) % (TILE - 4);
-        pr(g, sx, 9, 3, 1, 'rgba(255,255,255,.7)');
-        pr(g, sx + 1, 10, 1, 1, 'rgba(255,255,255,.45)');
-        pr(g, (sx + 17) % (TILE - 4), 24, 4, 1, 'rgba(255,255,255,.5)');
-        pr(g, (sx + 8) % (TILE - 4), 2, 2, 1, 'rgba(255,255,255,.35)');
+        // specular sparkles, only on some tiles so the surface is not uniform
+        if (hash2(variant, 7, 227) > .45)
+        {
+            var sx = (frame * 9 + variant * 5 + 3) % (TILE - 4);
+            var sy = Math.floor(hash2(variant, 9, 229) * (TILE - 6));
+            pr(g, sx, sy, 3, 1, 'rgba(255,255,255,.62)');
+            pr(g, sx + 1, sy + 1, 1, 1, 'rgba(255,255,255,.4)');
+            pr(g, (sx + 17) % (TILE - 4), (sy + 15) % (TILE - 2), 4, 1, 'rgba(255,255,255,.45)');
+        }
     });
 }
 
@@ -3269,7 +3326,7 @@ function tileStoneFloor(variant)
     {
         // warm irregular flagstones. slab tones stay close together on purpose:
         // a big tone gap here reads as a chessboard, not as paving.
-        var base = '#a09585';
+        var base = '#ab9b83';
         pr(g, 0, 0, TILE, TILE, tone(base, -1.8));
         // four flagstone layouts so a plaza does not read as graph paper
         var sets = [
@@ -3352,9 +3409,10 @@ function tileCarpet(variant)
     });
 }
 
-function tilePath()
+function tilePath(variant)
 {
-    return bake('t:path', TILE, TILE, function (g)
+    variant = variant || 0;
+    return bake('t:path:' + variant, TILE, TILE, function (g)
     {
         var base = '#a68c66';
         pr(g, 0, 0, TILE, TILE, base);
@@ -3363,19 +3421,32 @@ function tilePath()
         var i;
         for (i = 0; i < 14; i++)
         {
-            var x = 1 + Math.floor(hash2(i, 3, 31) * 28);
-            var y = 1 + Math.floor(hash2(3, i, 37) * 28);
-            var w = 3 + Math.floor(hash2(i, i, 41) * 5);
-            var h = 2 + Math.floor(hash2(i, i, 43) * 3);
+            var x = 1 + Math.floor(hash2(i, variant + 3, 31) * 28);
+            var y = 1 + Math.floor(hash2(variant + 3, i, 37) * 28);
+            var w = 3 + Math.floor(hash2(i, variant, 41) * 5);
+            var h = 2 + Math.floor(hash2(i, variant, 43) * 3);
             var c = tone(base, i % 3 === 0 ? 1.3 : (i % 3 === 1 ? -1.2 : .4));
             pe(g, x + w / 2, y + h / 2, w / 2, h / 2, c);
             pr(g, x + 1, y, w - 2, 1, tone(c, 1.4));
             pr(g, x, y + h, w, 1, tone(c, -1.8));
         }
-        crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.6), tone(base, -1.9), tone(base, -2.6)], 26, 53);
-        // faint wheel ruts
-        pr(g, 7, 0, 2, TILE, tone(base, -.7));
-        pr(g, 22, 0, 2, TILE, tone(base, -.7));
+        crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.6), tone(base, -1.9), tone(base, -2.6)], 26, 53 + variant);
+        // wheel ruts, but broken into segments -- a rut running the full tile
+        // height turns a long path into woven fabric once the tile repeats
+        var seg;
+        for (seg = 0; seg < 3; seg++)
+        {
+            var sy = seg * 11 + (variant % 4);
+            var sh = 5 + Math.floor(hash2(seg, variant, 91) * 5);
+            if (hash2(seg, variant, 93) > .3)
+            {
+                pr(g, 6 + Math.floor(hash2(seg, variant, 95) * 3), sy, 2, sh, tone(base, -.7));
+            }
+            if (hash2(seg, variant, 97) > .3)
+            {
+                pr(g, 21 + Math.floor(hash2(seg, variant, 99) * 3), sy, 2, sh, tone(base, -.7));
+            }
+        }
     });
 }
 
@@ -3385,7 +3456,8 @@ function tileCave(floor, variant)
     return bake('t:cave:' + floor + ':' + variant, TILE, TILE, function (g)
     {
         // lighter than the walls so the walkable area reads at a glance
-        var base = floor < 40 ? '#75604a' : (floor < 80 ? '#5a6c80' : '#74463c');
+        var skull = floor >= 100;
+        var base = floor < 40 ? '#75604a' : (floor < 80 ? '#5a6c80' : (skull ? '#6b4a52' : '#74463c'));
         pr(g, 0, 0, TILE, TILE, base);
         var i;
         for (i = 0; i < 2; i++)
@@ -3408,6 +3480,24 @@ function tileCave(floor, variant)
         // faint cracks
         pr(g, 6 + (variant % 5) * 4, 4, 1, 9, tone(base, -1.8));
         pr(g, 20 - (variant % 4) * 3, 19, 1, 8, tone(base, -1.8));
+        if (skull)
+        {
+            // glowing lava seams so the skull cavern floor is unmistakable
+            var lx = 3 + (variant % 4) * 7;
+            var ly = 8 + (variant % 3) * 7;
+            pr(g, lx, ly, 12, 2, '#8a2a1a');
+            pr(g, lx + 1, ly, 10, 1, '#e05a24');
+            pr(g, lx + 3, ly, 5, 1, '#ffb050');
+            pr(g, lx + 14, ly + 5, 9, 2, '#8a2a1a');
+            pr(g, lx + 15, ly + 5, 7, 1, '#e05a24');
+            pr(g, 2, 26, 8, 2, '#7a2416');
+            pr(g, 3, 26, 6, 1, '#c8481e');
+        }
+        else if (floor >= 80)
+        {
+            pr(g, 4 + (variant % 5) * 5, 22, 8, 1, '#7a3018');
+            pr(g, 5 + (variant % 5) * 5, 22, 5, 1, '#c8501e');
+        }
     });
 }
 
@@ -3416,7 +3506,9 @@ function tileCaveWall(floor, variant)
     variant = variant || 0;
     return bake('t:cavew:' + floor + ':' + variant, TILE, TILE, function (g)
     {
-        var base = floor < 40 ? '#4a3c2c' : (floor < 80 ? '#3a4a5c' : '#4d2c22');
+        // skull cavern walls go much darker than the floor so the two never blend
+        var skullW = floor >= 100;
+        var base = floor < 40 ? '#4a3c2c' : (floor < 80 ? '#3a4a5c' : (skullW ? '#33212a' : '#4d2c22'));
         pr(g, 0, 0, TILE, TILE, tone(base, -1.6));
         // four block layouts, picked per tile so the wall does not tile visibly
         var sets = [
@@ -3440,6 +3532,17 @@ function tileCaveWall(floor, variant)
                 [tone(c, -1.3), tone(c, 1.2)], 4, i * 5 + floor + variant);
         }
         pr(g, 0, TILE - 3, TILE, 3, tone(base, -2.4));
+        if (floor >= 80)
+        {
+            // ember rim light along the bottom edge, as if lava lies below
+            pr(g, 0, TILE - 4, TILE, 1, 'rgba(226,90,36,.5)');
+            pr(g, 0, TILE - 3, TILE, 1, 'rgba(180,60,24,.35)');
+            var ei;
+            for (ei = 0; ei < 3; ei++)
+            {
+                pr(g, ((variant * 9 + ei * 11) % (TILE - 3)), TILE - 6, 2, 2, 'rgba(255,140,60,.45)');
+            }
+        }
     });
 }
 
@@ -3573,17 +3676,28 @@ function sprRug(kind)
 
 var TREE_W = 96, TREE_H = 128;
 
-function leafClump(g, cx, cy, r, col)
+// lit: draw the highlight. A bright dot in the middle of every clump made any
+// two clumps at the same height read as a pair of eyes, so the highlight is a
+// crescent along the upper-left arc and only clumps facing the light get one.
+function leafClump(g, cx, cy, r, col, lit)
 {
     pe(g, cx, cy, r, r * .88, tone(col, -1.4));
     pe(g, cx, cy - r * .12, r - 1, r * .8, col);
-    pe(g, cx - r * .34, cy - r * .34, r * .5, r * .42, tone(col, 1.1));
-    pe(g, cx - r * .44, cy - r * .46, r * .24, r * .2, tone(col, 1.9));
+    pe(g, cx + r * .3, cy + r * .28, r * .58, r * .44, tone(col, -.8));
+    if (lit === false)
+    {
+        return;
+    }
+    // carve a crescent: lighter ellipse, then the base colour shaved off it
+    pe(g, cx - r * .26, cy - r * .3, r * .66, r * .5, tone(col, 1.05));
+    pe(g, cx - r * .4, cy - r * .48, r * .56, r * .4, col);
+    pe(g, cx - r * .5, cy - r * .34, r * .2, r * .13, tone(col, 1.7));
 }
 
-function sprTree(kind, stage, season)
+function sprTree(kind, stage, season, variant)
 {
-    var key = 'tree:' + kind + ':' + stage + ':' + season;
+    variant = (stage >= 3 ? (variant || 0) % 4 : 0);
+    var key = 'tree:' + kind + ':' + stage + ':' + season + ':' + variant;
     return bake(key, TREE_W, TREE_H, function (g)
     {
         var leafCol = {
@@ -3637,7 +3751,7 @@ function sprTree(kind, stage, season)
 
         if (kind === 'pine')
         {
-            drawPine(g, cx, groundY, stage, leafCol);
+            drawPine(g, cx, groundY, stage, leafCol, variant);
             return;
         }
         if (!leafCol)
@@ -3645,7 +3759,7 @@ function sprTree(kind, stage, season)
             drawBareBranches(g, cx, groundY, th, trunk, season === 'winter');
             return;
         }
-        drawCanopy(g, cx, groundY - th + 6, stage === 4 ? 34 : 28, leafCol, kind, season);
+        drawCanopy(g, cx, groundY - th + 6, stage === 4 ? 34 : 28, leafCol, kind, season, variant);
     }, { outline: true });
 }
 
@@ -3673,15 +3787,28 @@ function drawTrunk(g, cx, groundY, h, w, trunk)
     pr(g, cx + w / 2, groundY - 5, 4, 5, tone(trunk, -1.5));
 }
 
-function drawCanopy(g, cx, cy, r, col, kind, season)
+function drawCanopy(g, cx, cy, r, col, kind, season, variant)
 {
-    // base mass, then clumps so the silhouette stays lumpy instead of circular
-    var pts = [
-        [0, 4, 1.0], [-r * .62, -r * .1, .72], [r * .6, -r * .05, .74],
-        [-r * .38, -r * .55, .66], [r * .36, -r * .58, .62], [0, -r * .72, .6],
-        [-r * .72, r * .38, .5], [r * .68, r * .42, .52], [0, r * .5, .66]
+    variant = variant || 0;
+    // base mass, then clumps so the silhouette stays lumpy instead of circular.
+    // every offset is jittered per variant: with one fixed table every tree in
+    // the forest was the same stamp, and the clump highlights read as a face.
+    var sq = 1 + (hash2(variant, 1, 251) - .5) * .34;
+    var base = [
+        [0, 4, 1.0], [-.62, -.1, .72], [.6, -.05, .74],
+        [-.38, -.55, .66], [.36, -.58, .62], [0, -.72, .6],
+        [-.72, .38, .5], [.68, .42, .52], [0, .5, .66]
     ];
-    var i;
+    var keep = 7 + Math.floor(hash2(variant, 2, 257) * 3);
+    var pts = [], i;
+    for (i = 0; i < base.length && i < keep; i++)
+    {
+        pts.push([
+            r * (base[i][0] + (hash2(variant, i, 263) - .5) * .3),
+            r * (base[i][1] + (hash2(i, variant, 269) - .5) * .3) * sq,
+            base[i][2] * (.86 + hash2(variant, i + 9, 271) * .3)
+        ]);
+    }
     for (i = 0; i < pts.length; i++)
     {
         var p = pts[i];
@@ -3690,17 +3817,23 @@ function drawCanopy(g, cx, cy, r, col, kind, season)
     for (i = 0; i < pts.length; i++)
     {
         var q = pts[i];
-        leafClump(g, cx + q[0], cy + q[1], Math.max(4, r * q[2] * .82), col);
+        // light comes from the top-left, so only clumps up there catch it
+        leafClump(g, cx + q[0], cy + q[1], Math.max(4, r * q[2] * .82), col,
+            (q[0] <= r * .12 && q[1] <= r * .16));
     }
     // gaps between clumps read as depth
-    pr(g, cx - 3, cy + r * .1, 4, 6, tone(col, -2.2));
-    pr(g, cx + r * .3, cy - r * .1, 3, 7, tone(col, -2.2));
-    pr(g, cx - r * .45, cy + r * .3, 5, 4, tone(col, -2));
+    for (i = 0; i < 3; i++)
+    {
+        var gx = cx + r * (hash2(variant, i, 277) - .5) * 1.2;
+        var gy = cy + r * (hash2(i, variant, 281) - .4) * .9;
+        pr(g, gx, gy, 3 + Math.floor(hash2(i, variant, 283) * 3),
+            4 + Math.floor(hash2(variant, i, 287) * 4), tone(col, -2.2));
+    }
     // ragged leaf edge
     for (i = 0; i < 18; i++)
     {
-        var a = (i / 18) * Math.PI * 2;
-        var rr = r * (.92 + hash2(i, 3, 7) * .16);
+        var a = (i / 18) * Math.PI * 2 + variant * .4;
+        var rr = r * (.92 + hash2(i, variant + 3, 7) * .16);
         var lx = cx + Math.cos(a) * rr;
         var ly = cy + Math.sin(a) * rr * .92;
         var c = (a > 2.2 && a < 5.4) ? tone(col, -1.8) : tone(col, hash2(i, 5, 9) > .5 ? 1.4 : .3);
@@ -3714,69 +3847,106 @@ function drawCanopy(g, cx, cy, r, col, kind, season)
     }
 }
 
-function drawPine(g, cx, groundY, stage, col)
+function drawPine(g, cx, groundY, stage, col, variant)
 {
-    var layers = stage === 4 ? 5 : 4;
-    var i, t;
-    for (i = 0; i < layers; i++)
+    variant = variant || 0;
+    // The old version stacked separate triangles, which left gaps between the
+    // layers and read as a pile of paper cutouts with a floating spike on top.
+    // Now: one continuous cone silhouette, with skirt shadows and drooping
+    // needle tips drawn on top of it, so nothing can come apart.
+    var bottom = groundY - 12;
+    var top = groundY - (stage === 4 ? 108 : 86);
+    var botW = (stage === 4 ? 29 : 24) + Math.round((hash2(variant, 6, 311) - .5) * 7);
+    var lean = (hash2(variant, 4, 293) - .5) * 9;
+    var taper = .72 + hash2(variant, 8, 313) * .22;
+    var span = bottom - top;
+    var y, t, w, ax;
+    for (y = top; y <= bottom; y++)
     {
-        var ly = groundY - 34 - i * 17;
-        var lw = 34 - i * 6;
-        for (t = 0; t < 20; t++)
+        t = (y - top) / span;
+        // jitter the silhouette so the edge reads as needles, not a ruled line
+        w = Math.max(1, Math.round(botW * Math.pow(t, taper)
+            + (hash2(y, variant, 307) - .5) * 2.6));
+        ax = cx + lean * (1 - t);
+        pr(g, ax - w, y, w * 2, 1, col);
+        pr(g, ax - w, y, Math.max(1, Math.round(w * .42)), 1, tone(col, .85));
+        pr(g, ax + Math.round(w * .5), y, Math.max(1, w - Math.round(w * .5)), 1, tone(col, -1.05));
+    }
+    var layers = stage === 4 ? 6 : 5;
+    var i, d;
+    for (i = 1; i <= layers; i++)
+    {
+        var ly = Math.round(top + span * (i / (layers + .35)));
+        var lt = (ly - top) / span;
+        var lw = Math.max(2, Math.round(botW * Math.pow(lt, taper)));
+        var lx = cx + lean * (1 - lt);
+        pr(g, lx - lw, ly, lw * 2, 1, tone(col, -2));
+        pr(g, lx - lw + 1, ly + 1, lw * 2 - 2, 1, tone(col, -1.2));
+        pr(g, lx - lw + 2, ly - 3, Math.round(lw * .85), 1, tone(col, 1.1));
+        for (d = -lw; d <= lw; d += 4)
         {
-            var ww = Math.round(lw * (1 - t / 22));
-            if (ww <= 0)
+            if (hash2(d + 40, variant * 3 + i, 301) < .3)
             {
                 continue;
             }
-            var c = t < 3 ? tone(col, 1.3) : (t < 9 ? col : tone(col, -1.2));
-            pr(g, cx - ww, ly + t, ww * 2, 1, c);
+            pr(g, lx + d, ly - 1, 2, 2 + Math.floor(hash2(d + 9, i + variant, 303) * 3),
+                tone(col, -1.5));
         }
-        // needle notches on the skirt
-        for (t = -lw; t < lw; t += 6)
-        {
-            pr(g, cx + t, ly + 18, 3, 2, tone(col, -1.9));
-        }
-        pr(g, cx - lw + 2, ly + 12, lw - 4, 1, tone(col, .9));
     }
-    pr(g, cx - 2, groundY - 34 - layers * 17 + 4, 4, 8, col);
-    pr(g, cx - 2, groundY - 34 - layers * 17 + 4, 2, 6, tone(col, 1.4));
+    // crown: a short tapering spire welded to the cone, not floating above it
+    for (y = top - 7; y < top + 2; y++)
+    {
+        w = Math.max(1, Math.round((y - (top - 8)) * .5));
+        pr(g, cx + lean - w, y, w * 2, 1, col);
+        pr(g, cx + lean - w, y, 1, 1, tone(col, 1.3));
+    }
 }
 
 function drawBareBranches(g, cx, groundY, th, trunk, snowy)
 {
+    // Horizontal bars on both sides of a straight trunk read as a TV antenna.
+    // Draw tapering limbs along real angles, each splitting once, so the
+    // silhouette is a tree.
     var top = groundY - th;
-    var arms = [
-        [-1, 18, 26, 4], [1, 26, 30, 4], [-1, 34, 22, 3], [1, 42, 24, 3], [-1, 50, 16, 3]
-    ];
-    var i;
-    for (i = 0; i < arms.length; i++)
+    function limb(x0, y0, ang, len, w, depth)
     {
-        var a = arms[i];
-        var y = top + (th - a[1]);
-        var len = a[2], w = a[3];
-        var x0 = a[0] < 0 ? cx - len : cx;
-        pr(g, x0, y, len, w, trunk);
-        pr(g, x0, y, len, 1, tone(trunk, 1));
-        pr(g, x0, y + w - 1, len, 1, tone(trunk, -1.8));
-        var tipX = a[0] < 0 ? x0 - 6 : x0 + len;
-        pr(g, tipX, y - 8, 3, 10, trunk);
-        pr(g, tipX, y - 8, 1, 10, tone(trunk, .9));
-        if (snowy)
+        var i, x = x0, y = y0;
+        var dx = Math.cos(ang), dy = Math.sin(ang);
+        for (i = 0; i < len; i++)
         {
-            pr(g, x0, y - 1, len, 1, '#eef6fc');
-            pr(g, tipX, y - 9, 3, 1, '#eef6fc');
+            var ww = Math.max(1, Math.round(w * (1 - i / (len * 1.25))));
+            x += dx;
+            y += dy;
+            pr(g, Math.round(x - ww / 2), Math.round(y), ww, 1, trunk);
+            if (ww > 1)
+            {
+                pr(g, Math.round(x - ww / 2), Math.round(y), 1, 1, tone(trunk, 1));
+            }
+            if (snowy && i % 3 === 0 && dy < 0)
+            {
+                pr(g, Math.round(x - ww / 2), Math.round(y) - 1, Math.max(1, ww - 1), 1, '#eef6fc');
+            }
+        }
+        if (depth > 0)
+        {
+            limb(x, y, ang - .5 - depth * .1, len * .62, w * .66, depth - 1);
+            limb(x, y, ang + .42 + depth * .12, len * .55, w * .6, depth - 1);
         }
     }
-    pr(g, cx - 3, top - 12, 6, 20, trunk);
-    pr(g, cx - 3, top - 12, 2, 20, tone(trunk, 1));
+    // main trunk continues above the drawn trunk into a leader
+    pr(g, cx - 3, top - 16, 6, 22, trunk);
+    pr(g, cx - 3, top - 16, 2, 22, tone(trunk, 1));
+    limb(cx - 1, top + 4, -Math.PI * .78, 20, 5, 2);
+    limb(cx + 1, top + 10, -Math.PI * .2, 19, 5, 2);
+    limb(cx - 1, top + 18, -Math.PI * .86, 15, 4, 1);
+    limb(cx + 1, top + 26, -Math.PI * .12, 14, 4, 1);
+    limb(cx, top - 15, -Math.PI * .5, 12, 4, 1);
     if (snowy)
     {
-        pr(g, cx - 3, top - 13, 6, 1, '#eef6fc');
+        pr(g, cx - 3, top - 17, 6, 1, '#eef6fc');
     }
 }
 
-// fruit tree
 function sprFruitTree(saplingId, stage, fruit, season)
 {
     var def = FRUIT_TREES[saplingId];
@@ -4787,9 +4957,12 @@ function drawShape(g, shape, cols, ox, oy, s)
             P(3, 4, 18, 2, tone(a, 1.1));
             break;
         case 'tool_hoe':
-            P(11, 3, 3, 18, '#a5763f'); P(11, 3, 1, 18, '#c69660'); P(13, 4, 1, 17, '#6f4a20');
-            P(3, 17, 9, 4, cols[2]); P(3, 17, 9, 1, tone(cols[2], 1.6));
-            P(3, 20, 7, 2, tone(cols[2], -1.6));
+            // thicker shaft + a broad blade so it reads at 32px
+            P(12, 2, 4, 17, '#a5763f'); P(12, 2, 2, 17, '#c89a62'); P(15, 3, 1, 16, '#6f4a20');
+            P(11, 1, 6, 3, '#8a5f30');
+            P(2, 15, 13, 6, cols[2]); P(2, 15, 13, 2, tone(cols[2], 1.7));
+            P(2, 19, 13, 2, tone(cols[2], -1.7));
+            P(4, 17, 4, 2, tone(cols[2], 1.2));
             break;
         case 'tool_can':
             P(5, 9, 12, 12, cols[2]);
@@ -4801,35 +4974,61 @@ function drawShape(g, shape, cols, ox, oy, s)
             P(8, 4, 6, 2, tone(cols[2], -1));
             break;
         case 'tool_axe':
-            P(11, 4, 3, 18, '#a5763f'); P(11, 4, 1, 18, '#c69660'); P(13, 5, 1, 17, '#6f4a20');
-            P(3, 3, 9, 8, cols[2]); P(3, 3, 9, 2, tone(cols[2], 1.6));
-            P(2, 6, 3, 5, tone(cols[2], 1.2));
-            P(3, 10, 9, 2, tone(cols[2], -1.8));
+            P(12, 3, 4, 19, '#a5763f'); P(12, 3, 2, 19, '#c89a62'); P(15, 4, 1, 18, '#6f4a20');
+            P(11, 20, 6, 3, '#6f4a20');
+            // wedge head with a curved bit
+            P(4, 2, 11, 5, cols[2]); P(3, 4, 12, 6, cols[2]); P(4, 9, 11, 3, cols[2]);
+            P(4, 2, 11, 2, tone(cols[2], 1.8));
+            P(2, 5, 3, 5, tone(cols[2], 1.3));
+            P(4, 10, 11, 2, tone(cols[2], -1.9));
+            P(11, 4, 3, 6, tone(cols[2], -1));
             break;
         case 'tool_pick':
-            P(11, 6, 3, 16, '#a5763f'); P(11, 6, 1, 16, '#c69660');
-            P(3, 4, 18, 3, cols[2]); P(3, 4, 18, 1, tone(cols[2], 1.6));
-            P(1, 6, 4, 3, cols[2]); P(19, 6, 4, 3, cols[2]);
-            P(3, 6, 18, 1, tone(cols[2], -1.6));
+            P(11, 5, 4, 18, '#a5763f'); P(11, 5, 2, 18, '#c89a62');
+            P(10, 21, 6, 3, '#6f4a20');
+            // arced double head, thick in the middle
+            P(4, 3, 16, 5, cols[2]);
+            P(1, 5, 5, 4, cols[2]); P(18, 5, 5, 4, cols[2]);
+            P(0, 7, 3, 3, tone(cols[2], -.8)); P(21, 7, 3, 3, tone(cols[2], -.8));
+            P(4, 3, 16, 2, tone(cols[2], 1.8));
+            P(4, 7, 16, 1, tone(cols[2], -1.8));
+            P(10, 3, 4, 5, tone(cols[2], .9));
             break;
         case 'tool_scythe':
-            P(13, 4, 3, 18, '#a5763f'); P(13, 4, 1, 18, '#c69660');
-            P(3, 3, 11, 3, cols[2]); P(3, 3, 11, 1, tone(cols[2], 1.8));
-            P(1, 5, 4, 5, cols[2]); P(1, 5, 2, 5, tone(cols[2], 1.2));
-            P(3, 5, 11, 1, tone(cols[2], -1.6));
+            P(14, 3, 4, 19, '#a5763f'); P(14, 3, 2, 19, '#c89a62');
+            P(13, 20, 6, 3, '#6f4a20');
+            // long curving blade
+            P(4, 2, 12, 4, cols[2]);
+            P(2, 4, 4, 4, cols[2]);
+            P(1, 7, 3, 4, cols[2]);
+            P(2, 10, 3, 3, tone(cols[2], -.9));
+            P(4, 2, 12, 2, tone(cols[2], 1.9));
+            P(4, 5, 11, 1, tone(cols[2], -1.7));
             break;
         case 'tool_rod':
-            P(6, 19, 4, 4, '#a5763f'); P(6, 19, 2, 4, '#c69660');
-            P(8, 4, 3, 16, '#a5763f'); P(8, 4, 1, 16, '#c69660');
-            P(11, 3, 10, 2, cols[2]); P(19, 4, 2, 8, cols[2]);
-            O(20, 15, 3, 3, '#e05050', 1.6);
-            P(19, 13, 1, 1, '#ffffff');
+            // cork grip, reel, tapered rod, line down to a float
+            P(5, 17, 6, 6, '#7a4a24'); P(5, 17, 3, 6, '#a5763f');
+            P(6, 13, 4, 5, '#3a3a44');
+            O(8, 15, 3, 3, cols[2], 1.6);
+            P(8, 4, 4, 10, '#a5763f'); P(8, 4, 2, 10, '#c89a62');
+            P(10, 2, 8, 3, cols[2]); P(16, 3, 4, 3, cols[2]);
+            P(19, 5, 2, 9, tone(cols[2], -1));
+            P(20, 6, 1, 8, tone(cols[2], 1.4));
+            O(20, 17, 3, 3, '#e05050', 1.8);
+            P(19, 15, 1, 1, '#ffffff');
             break;
         case 'tool_sword':
-            P(10, 2, 5, 15, a); P(10, 2, 2, 15, c); P(14, 3, 1, 14, tone(a, -1.6));
-            P(11, 3, 1, 12, tone(c, 1.6));
-            P(6, 16, 13, 3, b); P(6, 16, 13, 1, tone(b, 1.2));
-            P(11, 19, 3, 5, b); O(12, 23, 2, 2, tone(b, 1.4), 1.6);
+            // broader blade with a fuller, plus a proper crossguard and pommel
+            P(10, 1, 6, 3, a);
+            P(9, 3, 8, 13, a);
+            P(9, 3, 3, 13, c);
+            P(15, 4, 2, 12, tone(a, -1.7));
+            P(12, 3, 2, 13, tone(c, 1.7));
+            P(11, 1, 4, 2, tone(c, 1.4));
+            P(5, 16, 16, 4, b); P(5, 16, 16, 1, tone(b, 1.4));
+            P(4, 17, 2, 2, tone(b, .8)); P(20, 17, 2, 2, tone(b, .8));
+            P(11, 20, 4, 4, b);
+            O(13, 24, 3, 2, tone(b, 1.5), 1.7);
             break;
         default:
             O(12, 13, 8, 8, a, 1.6);
@@ -5488,6 +5687,13 @@ function sprParticle(kind)
         {
             pe(g, 6, 6, 4, 2, '#59a83c');
             pr(g, 4, 5, 2, 1, '#7cc45a');
+            pr(g, 2, 6, 8, 1, '#3f7a28');
+        }
+        else if (kind === 'leaf_fall')
+        {
+            pe(g, 6, 6, 4, 2, '#c8742a');
+            pr(g, 4, 5, 2, 1, '#e8a04a');
+            pr(g, 2, 6, 8, 1, '#9a4e18');
         }
         else if (kind === 'spark')
         {
@@ -5584,36 +5790,78 @@ function sprPet(kind, frame)
 
 function sprHorse(frame)
 {
-    return bake('horse:' + frame, TILE * 2, TILE + 8, function (g)
+    return bake('horse:' + frame, TILE * 2, TILE + 12, function (g)
     {
+        // the first pass read as a brown blob. built from a clear silhouette now:
+        // barrel body, sloped neck, wedge head, four legs in two pairs.
         var bob = frame % 2;
-        var body = '#8a5a34', mane = '#3a2a18';
-        contactShadow(g, 32, 36, 18, 4);
-        pr(g, 10, 14 + bob, 34, 14, body);
-        pr(g, 10, 24 + bob, 34, 4, tone(body, -1.4));
-        pr(g, 10, 14 + bob, 34, 3, tone(body, 1.2));
-        orb(g, 46, 11 + bob, 8, 7, body, 1.4);
-        pr(g, 50, 13 + bob, 6, 5, body);
-        pr(g, 54, 15 + bob, 3, 3, tone(body, -1));
-        pr(g, 52, 12 + bob, 2, 2, '#1d1710');
-        pr(g, 42, 4 + bob, 3, 6, body);
-        pr(g, 47, 4 + bob, 3, 6, body);
-        // mane and tail
-        pr(g, 38, 6 + bob, 6, 12, mane);
-        pr(g, 6, 12 - bob, 5, 16, mane);
-        pr(g, 4, 16 - bob, 4, 12, tone(mane, .8));
-        // legs
-        pr(g, 13, 28, 5, 10, tone(body, -1));
-        pr(g, 22, 28, 5, 10, tone(body, -1.6));
-        pr(g, 32, 28, 5, 10, tone(body, -1));
-        pr(g, 40, 28, 5, 10, tone(body, -1.6));
-        pr(g, 13, 36, 5, 2, '#2e2620');
-        pr(g, 22, 36, 5, 2, '#2e2620');
-        pr(g, 32, 36, 5, 2, '#2e2620');
-        pr(g, 40, 36, 5, 2, '#2e2620');
-        // saddle
-        pr(g, 20, 12 + bob, 12, 5, '#5a3a1a');
-        pr(g, 20, 12 + bob, 12, 1, '#7a5a30');
+        var body = '#8f5c30', mane = '#33220f';
+        var H = TILE + 12;
+        var gy = H - 2;
+        contactShadow(g, 30, gy - 1, 20, 4);
+
+        // far legs first so the near pair overlaps them
+        pr(g, 20, gy - 14, 5, 14, tone(body, -1.7));
+        pr(g, 40, gy - 14, 5, 14, tone(body, -1.7));
+        pr(g, 20, gy - 3, 5, 3, '#241a12');
+        pr(g, 40, gy - 3, 5, 3, '#241a12');
+
+        // barrel
+        var ty = gy - 30 + bob;
+        pe(g, 30, ty + 8, 17, 9, tone(body, -1.1));
+        pr(g, 13, ty, 34, 15, body);
+        pe(g, 14, ty + 7, 5, 7, body);
+        pe(g, 46, ty + 6, 6, 7, body);
+        pr(g, 13, ty, 34, 3, tone(body, 1.3));
+        pr(g, 13, ty + 12, 34, 4, tone(body, -1.5));
+        pr(g, 13, ty + 15, 34, 1, tone(body, -2.2));
+        // belly shading
+        pe(g, 30, ty + 14, 14, 3, tone(body, -1.8));
+
+        // near legs, offset for the walk
+        pr(g, 17, gy - 15 + bob, 6, 15, body);
+        pr(g, 36, gy - 15 - bob, 6, 15, body);
+        pr(g, 17, gy - 15 + bob, 2, 15, tone(body, 1));
+        pr(g, 36, gy - 15 - bob, 2, 15, tone(body, 1));
+        pr(g, 17, gy - 5 + bob, 6, 3, tone(body, -1.4));
+        pr(g, 36, gy - 5 - bob, 6, 3, tone(body, -1.4));
+        pr(g, 16, gy - 2 + bob, 8, 2, '#241a12');
+        pr(g, 35, gy - 2 - bob, 8, 2, '#241a12');
+
+        // neck rising to the right, then a wedge head
+        var nx = 44, ny = ty - 10;
+        pr(g, nx, ny + 4, 9, 14, body);
+        pr(g, nx + 2, ny, 9, 10, body);
+        pr(g, nx + 2, ny, 3, 12, tone(body, 1.2));
+        pr(g, nx + 8, ny + 2, 3, 14, tone(body, -1.4));
+        // head: cheek block + tapering muzzle
+        pr(g, nx + 3, ny - 8, 10, 9, body);
+        pr(g, nx + 3, ny - 8, 4, 9, tone(body, 1.1));
+        pr(g, nx + 11, ny - 5, 6, 6, body);
+        pr(g, nx + 15, ny - 3, 4, 4, tone(body, -.8));
+        pr(g, nx + 17, ny - 2, 2, 2, tone(body, -1.8));
+        // eye + nostril
+        pr(g, nx + 9, ny - 5, 2, 2, '#150f0a');
+        pr(g, nx + 9, ny - 5, 1, 1, '#8a7a68');
+        pr(g, nx + 17, ny - 1, 1, 1, '#150f0a');
+        // ears
+        pr(g, nx + 4, ny - 12, 2, 5, body);
+        pr(g, nx + 8, ny - 12, 2, 5, body);
+        pr(g, nx + 4, ny - 12, 1, 3, tone(body, 1.2));
+        // mane down the neck and a forelock
+        pr(g, nx - 1, ny - 6, 5, 20, mane);
+        pr(g, nx - 1, ny - 6, 2, 20, tone(mane, .9));
+        pr(g, nx + 5, ny - 11, 4, 4, mane);
+        // tail
+        pr(g, 8, ty + 1 - bob, 6, 20, mane);
+        pr(g, 6, ty + 6 - bob, 5, 16, tone(mane, -.6));
+        pr(g, 9, ty + 2 - bob, 2, 14, tone(mane, 1));
+        // saddle + blanket
+        pr(g, 24, ty - 1, 14, 6, '#7a2f2a');
+        pr(g, 24, ty - 1, 14, 1, '#a04a40');
+        pr(g, 26, ty + 4, 10, 3, '#4a3018');
+        pr(g, 26, ty + 4, 10, 1, '#6a4a28');
+        pr(g, 30, ty + 6, 2, 6, '#3a2612');
     }, { outline: true });
 }
 
@@ -5625,10 +5873,29 @@ function sprCactus(big)
         var c = '#4a8a44';
         contactShadow(g, 16, H - 3, 8, 3);
         var h = big ? 34 : 20;
-        pr(g, 12, H - 5 - h, 8, h, c);
-        pr(g, 12, H - 5 - h, 3, h, tone(c, 1.1));
-        pr(g, 18, H - 5 - h, 2, h, tone(c, -1.3));
-        pe(g, 16, H - 5 - h, 4, 3, tone(c, 1.3));
+        if (big)
+        {
+            pr(g, 12, H - 5 - h, 8, h, c);
+            pr(g, 12, H - 5 - h, 3, h, tone(c, 1.1));
+            pr(g, 18, H - 5 - h, 2, h, tone(c, -1.3));
+            pe(g, 16, H - 5 - h, 4, 3, tone(c, 1.3));
+        }
+        else
+        {
+            // barrel cactus: squat and ribbed, so it does not read as a pill
+            pe(g, 16, H - 5 - h / 2, 8, h / 2 + 1, c);
+            pe(g, 14, H - 6 - h / 2, 5, h / 2 - 1, tone(c, 1));
+            pe(g, 19, H - 4 - h / 2, 3, h / 2 - 2, tone(c, -1.2));
+            var rib;
+            for (rib = 0; rib < 4; rib++)
+            {
+                var rx2 = 10 + rib * 4;
+                pr(g, rx2, H - 4 - h + 3 + Math.abs(rib - 1), 1,
+                    h - 5 - Math.abs(rib - 1) * 2, tone(c, rib < 2 ? 1.4 : -1.5));
+            }
+            pe(g, 16, H - 4 - h, 5, 2, tone(c, 1.5));
+            pe(g, 16, H - 6, 7, 2, tone(c, -1.6));
+        }
         if (big)
         {
             pr(g, 5, H - 26, 8, 5, c);
@@ -5757,6 +6024,17 @@ function drawTitleArt(g, W, H, t)
 var T_GRASS = 0, T_DIRT = 1, T_SAND = 2, T_WATER = 3, T_DEEP = 4, T_CLIFF = 5,
     T_STONE = 6, T_WOOD = 7, T_PATH = 8, T_ICE = 9, T_CAVE = 10, T_CAVEWALL = 11,
     T_CARPET = 12, T_WALL = 13, T_BRIDGE = 14, T_VOID = 15;
+
+// higher priority ground grows a ragged 1-2px lip over its lower neighbour so
+// no two materials ever meet in a straight line. must be assigned here: EDGE_PRI
+// is declared in sprites.js, which is bundled before these constants exist.
+EDGE_PRI[T_GRASS] = 5;
+EDGE_PRI[T_SAND] = 4;
+EDGE_PRI[T_PATH] = 3;
+EDGE_PRI[T_DIRT] = 2;
+EDGE_PRI[T_STONE] = 1;
+EDGE_PRI[T_WOOD] = 1;
+EDGE_PRI[T_BRIDGE] = 1;
 
 var SOLID_TILES = {};
 SOLID_TILES[T_WATER] = 1;
@@ -5950,8 +6228,10 @@ var MAPS = {
         ],
         wp: [
             { x: 18, y: 37, w: 6, h: 1, to: 'town', tx: 56, ty: 3 },
-            { x: 12, y: 8, w: 4, h: 2, to: 'mine', tx: 0, ty: 0, mine: true },
-            { x: 17, y: 5, w: 4, h: 1, to: 'quarry', tx: 13, ty: 22, locked: 'quarry' }
+            { x: 12, y: 8, w: 4, h: 2, to: 'mine', tx: 0, ty: 0, mine: true }
+            // No foot entrance to the quarry: the ledge at (17..20, 5) is walled
+            // in on all four sides, so that warp could never be stepped on. The
+            // minecart is the way in -- see openMinecart.
         ],
         sc: [
             { kind: 'tree', n: 26, avoid: [{ x: 4, y: 10, w: 22, h: 26 }] },
@@ -6412,7 +6692,81 @@ function rebuildSolid(m)
             }
         }
     }
+    // Edge warps sit inside a 2-tile border cliff, so clearing only the strip
+    // left it walled off from the interior: the farm was a sealed box and its
+    // town and forest exits could not be walked to at all. Open a gap from each
+    // edge warp back to the ground the player can actually stand on.
+    for (i = 0; i < m.warps.length; i++)
+    {
+        var wq = m.warps[i];
+        if (wq.interior || wq.mine)
+        {
+            continue;
+        }
+        var c, d;
+        for (d = 0; d < (wq.h || 1); d++)
+        {
+            for (c = 0; c < (wq.w || 1); c++)
+            {
+                carveEdgeGap(m, wq.x + c, wq.y + d);
+            }
+        }
+    }
     m.groundDirty = true;
+}
+
+// Walk from an edge warp tile toward the middle of the map, opening solid tiles
+// until standable ground is reached. Capped at 3 tiles so a badly placed warp
+// cannot bore a tunnel across the map. The tile type changes too, otherwise the
+// player would be walking through what still looks like a solid cliff face.
+function carveEdgeGap(m, x, y)
+{
+    var dl = x, dr = m.w - 1 - x, dt = y, db = m.h - 1 - y;
+    var near = Math.min(dl, dr, dt, db);
+    if (near > 3)
+    {
+        return;         // not an edge warp; leave the map alone
+    }
+    var dx = 0, dy = 0;
+    if (near === dl)
+    {
+        dx = 1;
+    }
+    else if (near === dr)
+    {
+        dx = -1;
+    }
+    else if (near === dt)
+    {
+        dy = 1;
+    }
+    else
+    {
+        dy = -1;
+    }
+    var open = m.outdoor ? T_PATH : T_STONE;
+    var i, cx = x, cy = y;
+    var idx0 = y * m.w + x;
+    if (SOLID_TILES[m.tiles[idx0]])
+    {
+        m.tiles[idx0] = open;
+    }
+    for (i = 0; i < 3; i++)
+    {
+        cx += dx;
+        cy += dy;
+        if (cx < 0 || cy < 0 || cx >= m.w || cy >= m.h)
+        {
+            return;
+        }
+        var idx = cy * m.w + cx;
+        if (m.solidMask[idx] === 0)
+        {
+            return;     // reached ground the player can stand on
+        }
+        m.solidMask[idx] = 0;
+        m.tiles[idx] = open;
+    }
 }
 
 function tileAt(m, tx, ty)
@@ -6569,19 +6923,19 @@ function groundCanvas(m, season, waterFrame)
                 var img = null;
                 if (t === T_GRASS)
                 {
-                    img = tileGrass(season, Math.floor(hash2(x, y, 3) * 4));
+                    img = tileGrass(season, Math.floor(hash2(x, y, 3) * 8));
                 }
                 else if (t === T_DIRT)
                 {
-                    img = tileDirt(season);
+                    img = tileDirt(season, Math.floor(hash2(x, y, 37) * 8));
                 }
                 else if (t === T_SAND)
                 {
-                    img = tileSand(Math.floor(hash2(x, y, 29) * 4));
+                    img = tileSand(Math.floor(hash2(x, y, 29) * 8));
                 }
                 else if (t === T_STONE)
                 {
-                    img = tileStoneFloor(Math.floor(hash2(x, y, 53) * 4));
+                    img = tileStoneFloor(Math.floor(hash2(x, y, 53) * 8));
                 }
                 else if (t === T_WOOD || t === T_BRIDGE)
                 {
@@ -6589,7 +6943,7 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_PATH)
                 {
-                    img = tilePath();
+                    img = tilePath(Math.floor(hash2(x, y, 61) * 8));
                 }
                 else if (t === T_ICE)
                 {
@@ -6657,8 +7011,141 @@ function groundCanvas(m, season, waterFrame)
                 }
             }
         }
+        groundMacro(g, m, season);
     }
     return m._gc;
+}
+
+// Tiles repeat every 32px, and the eye locks onto that period long before it
+// notices the pixels inside a tile -- which is why a desert screen read as
+// brickwork no matter how good one sand tile looked. This paints broad, soft
+// light and dark swells across the whole map so the dominant frequency is
+// terrain-sized, not tile-sized. It runs once per ground bake, so it is free.
+function groundMacro(g, m, season)
+{
+    if (!m.outdoor && m.id !== 'mine')
+    {
+        return;
+    }
+    var W = m.w * TILE, H = m.h * TILE;
+    var seed = 0, i;
+    for (i = 0; i < m.id.length; i++)
+    {
+        seed = (seed * 31 + m.id.charCodeAt(i)) | 0;
+    }
+    seed = Math.abs(seed) + (season === 'winter' ? 7 : 0);
+    var rnd = function (n)
+    {
+        return hash2(seed % 977, n, 157);
+    };
+
+    g.save();
+    // soft-light keeps the hue and only moves lightness. plain alpha fills
+    // would grey the colour out, which is what a flat overlay looked like.
+    g.globalCompositeOperation = 'soft-light';
+    var soft = g.globalCompositeOperation === 'soft-light';
+    if (!soft)
+    {
+        g.globalCompositeOperation = 'source-over';
+    }
+
+    // broad swells first
+    var big = 4 + Math.round(W * H / 900000);
+    var n, cx, cy, r, grd, up, a;
+    for (n = 0; n < big; n++)
+    {
+        cx = rnd(n * 4 + 1) * W;
+        cy = rnd(n * 4 + 2) * H;
+        r = 190 + rnd(n * 4 + 3) * 300;
+        up = rnd(n * 4 + 4) > .5;
+        a = soft ? .30 : .05;
+        grd = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+        grd.addColorStop(0, (up ? 'rgba(255,255,255,' : 'rgba(0,0,0,') + a + ')');
+        grd.addColorStop(1, (up ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)'));
+        g.fillStyle = grd;
+        g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+
+    // then medium patches at a scale that straddles several tiles
+    var mid = 14 + Math.round(W * H / 130000);
+    if (mid > 110)
+    {
+        mid = 110;
+    }
+    for (n = 0; n < mid; n++)
+    {
+        cx = rnd(n * 5 + 501) * W;
+        cy = rnd(n * 5 + 502) * H;
+        r = 46 + rnd(n * 5 + 503) * 96;
+        up = rnd(n * 5 + 504) > .48;
+        a = soft ? (.16 + rnd(n * 5 + 505) * .16) : .035;
+        grd = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+        grd.addColorStop(0, (up ? 'rgba(255,252,236,' : 'rgba(22,18,40,') + a + ')');
+        grd.addColorStop(.62, (up ? 'rgba(255,252,236,' : 'rgba(22,18,40,') + (a * .45) + ')');
+        grd.addColorStop(1, up ? 'rgba(255,252,236,0)' : 'rgba(22,18,40,0)');
+        g.fillStyle = grd;
+        g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+    g.restore();
+
+    // long features that must cross tile borders. drawn here rather than inside
+    // the tile, because anything wide baked into a 32px tile becomes a motif.
+    macroStreaks(g, m, T_SAND, 'rgba(255,246,214,.5)', 'rgba(150,116,60,.24)', 1.6, seed + 11);
+    macroStreaks(g, m, T_DIRT, 'rgba(255,238,206,.26)', 'rgba(58,36,18,.22)', 1.1, seed + 29);
+    macroStreaks(g, m, T_CAVE, 'rgba(220,226,255,.16)', 'rgba(10,8,20,.30)', .9, seed + 47);
+}
+
+// Sweeping 1px ripple lines restricted to one ground material. Each streak is
+// drawn segment by segment and skips tiles of any other type, so it never
+// bleeds onto grass or water.
+function macroStreaks(g, m, want, lit, shade, density, seed)
+{
+    var total = 0, i, x, y;
+    for (i = 0; i < m.tiles.length; i++)
+    {
+        if (m.tiles[i] === want)
+        {
+            total++;
+        }
+    }
+    if (total < 24)
+    {
+        return;
+    }
+    var n = Math.min(240, Math.round(total * density / 10));
+    var rnd = function (k)
+    {
+        return hash2(seed % 1013, k, 173);
+    };
+    var s, seg;
+    for (s = 0; s < n; s++)
+    {
+        var sx = rnd(s * 6 + 1) * m.w * TILE;
+        var sy = rnd(s * 6 + 2) * m.h * TILE;
+        var len = 34 + rnd(s * 6 + 3) * 116;
+        var slope = (rnd(s * 6 + 4) - .5) * .34;
+        var dark = rnd(s * 6 + 5) > .55;
+        g.fillStyle = dark ? shade : lit;
+        for (seg = 0; seg < len; seg++)
+        {
+            x = sx + seg;
+            y = sy + seg * slope;
+            var tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+            if (tx < 0 || ty < 0 || tx >= m.w || ty >= m.h)
+            {
+                break;
+            }
+            if (m.tiles[ty * m.w + tx] !== want)
+            {
+                continue;
+            }
+            g.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+            if (!dark)
+            {
+                g.fillRect(Math.floor(x), Math.floor(y) + 1, 1, 1);
+            }
+        }
+    }
 }
 
 function drawCliffTile(g, m, x, y, season)
@@ -6724,26 +7211,46 @@ function drawWaterOverlay(g, m, cam, frame, vw, vh)
                 continue;
             }
             var sx = x * TILE - cam.x, sy = y * TILE - cam.y;
-            g.drawImage(tileWater(frame, t === T_DEEP), sx, sy);
-            // foam where water meets land: the single cheapest thing that stops
-            // a lake looking like a blue rectangle
-            var ph = (frame % 2) ? 1 : 0;
+            g.drawImage(tileWater(frame, t === T_DEEP,
+                Math.floor(hash2(x, y, 83) * 8)), sx, sy);
+
+            // large-scale tone lives here, not in the tile: a per-tile tone shift
+            // turns a lake into a checkerboard of blue squares. hashing on x/4,y/4
+            // gives ~128px patches that read as depth instead.
+            var pt = hash2(Math.floor(x / 4), Math.floor(y / 4), 89);
+            if (pt > .62)
+            {
+                g.fillStyle = 'rgba(180,220,255,.055)';
+                g.fillRect(sx, sy, TILE, TILE);
+            }
+            else if (pt < .34)
+            {
+                g.fillStyle = 'rgba(4,24,56,.075)';
+                g.fillRect(sx, sy, TILE, TILE);
+            }
+
+            // shallow-to-deep must not be a straight line either
+            if (t === T_DEEP && tileAt(m, x, y - 1) === T_WATER)
+            {
+                dither(g, sx, sy, TILE, 6, '#2e77b2', '#1c4a76', .5);
+            }
+
+            // ragged, lapping foam where water meets land
             if (!WATER_TILES[tileAt(m, x, y - 1)])
             {
-                pr(g, sx, sy, TILE, 2, 'rgba(240,250,255,.75)');
-                pr(g, sx + ph * 4, sy + 2, TILE - 8, 1, 'rgba(220,240,255,.45)');
+                foamEdge(g, sx, sy, 0, x, y, frame);
             }
             if (!WATER_TILES[tileAt(m, x, y + 1)])
             {
-                pr(g, sx, sy + TILE - 2, TILE, 2, 'rgba(230,245,255,.6)');
+                foamEdge(g, sx, sy, 2, x, y, frame);
             }
             if (!WATER_TILES[tileAt(m, x - 1, y)])
             {
-                pr(g, sx, sy, 2, TILE, 'rgba(240,250,255,.6)');
+                foamEdge(g, sx, sy, 3, x, y, frame);
             }
             if (!WATER_TILES[tileAt(m, x + 1, y)])
             {
-                pr(g, sx + TILE - 2, sy, 2, TILE, 'rgba(240,250,255,.6)');
+                foamEdge(g, sx, sy, 1, x, y, frame);
             }
         }
     }
@@ -6787,7 +7294,8 @@ function drawObject(g, o, cam, season, tick)
     switch (o.kind)
     {
         case 'tree':
-            g.drawImage(sprTree(o.tk, o.stage, season), x + TREE_DX, y + TREE_DY);
+            g.drawImage(sprTree(o.tk, o.stage, season, (o.x * 7 + o.y * 13) & 3),
+                x + TREE_DX, y + TREE_DY);
             break;
         case 'fruittree':
             g.drawImage(sprFruitTree(o.sap, o.stage, o.fruit || 0, season), x + TREE_DX, y + TREE_DY);
@@ -6843,7 +7351,11 @@ function drawObject(g, o, cam, season, tick)
             g.drawImage(sprBush(season), x, y - 16);
             break;
         case 'flowerdeco':
-            g.drawImage(sprFlowerTile(o.col), x, y);
+            // nothing is in bloom on snow
+            if (season !== 'winter')
+            {
+                g.drawImage(sprFlowerTile(o.col), x, y);
+            }
             break;
         case 'branch':
             g.drawImage(itemIcon('wood', 24), x + 4, y + 8);
@@ -7330,6 +7842,61 @@ function drawMinecart(g, x, y)
     pr(g, x + 6, y + 8, 20, 8, '#3a2a18');
     pe(g, x + 9, y + 21, 4, 4, '#3a3a42');
     pe(g, x + 23, y + 21, 4, 4, '#3a3a42');
+}
+
+// A flat 2px white bar along every water tile edge made every shoreline a
+// straight line. Both edges of the foam have to wobble: wobbling only the water
+// side still leaves the tile boundary as a hard rule across the screen.
+// side: 0 top, 1 right, 2 bottom, 3 left.
+function foamEdge(g, sx, sy, side, x, y, frame)
+{
+    var c, up, d, seed = x * 19 + y * 7;
+    for (c = 0; c < TILE; c += 2)
+    {
+        up = Math.floor(hash2(seed + c, frame, 105) * 3);
+        d = 2 + Math.floor(hash2(seed + c, frame, 101) * 3);
+        var tail = hash2(c, seed + frame, 103) > .58;
+        if (side === 0)
+        {
+            g.fillStyle = 'rgba(74,56,34,.20)';
+            g.fillRect(sx + c, sy - up - 3, 2, 3);
+            pr(g, sx + c, sy - up, 2, up + d, 'rgba(240,250,255,.72)');
+            if (tail)
+            {
+                pr(g, sx + c, sy + d, 2, 1, 'rgba(214,238,255,.42)');
+            }
+        }
+        else if (side === 2)
+        {
+            g.fillStyle = 'rgba(74,56,34,.20)';
+            g.fillRect(sx + c, sy + TILE + up, 2, 3);
+            pr(g, sx + c, sy + TILE - d, 2, up + d, 'rgba(232,246,255,.62)');
+            if (tail)
+            {
+                pr(g, sx + c, sy + TILE - d - 1, 2, 1, 'rgba(214,238,255,.36)');
+            }
+        }
+        else if (side === 3)
+        {
+            g.fillStyle = 'rgba(74,56,34,.20)';
+            g.fillRect(sx - up - 3, sy + c, 3, 2);
+            pr(g, sx - up, sy + c, up + d, 2, 'rgba(240,250,255,.68)');
+            if (tail)
+            {
+                pr(g, sx + d, sy + c, 1, 2, 'rgba(214,238,255,.4)');
+            }
+        }
+        else
+        {
+            g.fillStyle = 'rgba(74,56,34,.20)';
+            g.fillRect(sx + TILE + up, sy + c, 3, 2);
+            pr(g, sx + TILE - d, sy + c, up + d, 2, 'rgba(240,250,255,.68)');
+            if (tail)
+            {
+                pr(g, sx + TILE - d - 1, sy + c, 1, 2, 'rgba(214,238,255,.4)');
+            }
+        }
+    }
 }
 
 
@@ -11207,12 +11774,40 @@ var NPCS = [
 ];
 
 var NPC_BY_ID = {};
+
+// stable build per villager so the cast is not one body in 29 palettes.
+// exported because content.js adds villagers after this file runs.
+function assignNpcBuild(npc)
+{
+    var h = 0, c;
+    for (c = 0; c < npc.id.length; c++)
+    {
+        h = (h * 31 + npc.id.charCodeAt(c)) | 0;
+    }
+    h = Math.abs(h);
+    if (npc.look.tall === undefined)
+    {
+        npc.look.tall = (h % 5) - 2;
+    }
+    if (npc.look.wide === undefined)
+    {
+        npc.look.wide = Math.floor(h / 5) % 3;
+    }
+    return npc;
+}
+
+function registerNpc(npc)
+{
+    NPC_BY_ID[npc.id] = assignNpcBuild(npc);
+    return npc;
+}
+
 (function ()
 {
     var i;
     for (i = 0; i < NPCS.length; i++)
     {
-        NPC_BY_ID[NPCS[i].id] = NPCS[i];
+        registerNpc(NPCS[i]);
     }
 })();
 
@@ -12236,7 +12831,9 @@ MAPS.quarry = {
     ],
     b: [],
     obj: [{ kind: 'sign', x: 14, y: 4, text: '채석장' }],
-    wp: [{ x: 12, y: 25, w: 3, h: 1, to: 'mountain', tx: 18, ty: 6 }],
+    // arrive next to the mountain minecart: the old target (18,6) was inside a
+    // cliff whose only opening was a sealed pocket
+    wp: [{ x: 12, y: 25, w: 3, h: 1, to: 'mountain', tx: 22, ty: 18 }],
     sc: [
         { kind: 'stone', n: 60 },
         { kind: 'quarryore', n: 22 },
@@ -12275,7 +12872,7 @@ NPCS.push({
     lines: ['사막까지 오셨네요! 어서 오세요.', '여기선 선인장이 잘 자라요.',
         '사막 모래를 파보면 유물이 나오기도 해요.', '해골 동굴은 정말 위험해요. 조심하세요!']
 });
-NPC_BY_ID.sandy = NPCS[NPCS.length - 1];
+registerNpc(NPCS[NPCS.length - 1]);
 
 // desert forage
 I('coconut_desert', '사막 코코넛', 'forage', 100, 'ball', ['#8a6038', '#5a3818', '#c8a878']);
@@ -15409,7 +16006,13 @@ function assertLoaded()
         ['QUEST_CHAIN', typeof QUEST_CHAIN !== 'undefined' && QUEST_CHAIN && QUEST_CHAIN.length > 0],
         ['TROPHIES', typeof TROPHIES !== 'undefined' && TROPHIES && TROPHIES.length > 0],
         ['ARTIFACTS', typeof ARTIFACTS !== 'undefined' && ARTIFACTS && ARTIFACTS.length > 0],
-        ['desert map', typeof MAPS !== 'undefined' && MAPS && MAPS.desert]
+        ['desert map', typeof MAPS !== 'undefined' && MAPS && MAPS.desert],
+        // this one caught a silent failure: EDGE_PRI is declared in sprites.js but
+        // keyed by constants from world.js, so building it too early produced a
+        // table with a single "undefined" key and the ground fringe never ran.
+        ['EDGE_PRI', typeof EDGE_PRI !== 'undefined' && EDGE_PRI &&
+            EDGE_PRI[T_GRASS] !== undefined && EDGE_PRI[T_SAND] !== undefined &&
+            EDGE_PRI.undefined === undefined]
     ];
     var missing = [], i;
     for (i = 0; i < need.length; i++)
@@ -17462,14 +18065,15 @@ function updateWeather(dt)
     }
     else if (S.weather === 'wind')
     {
-        want = 22;
+        want = 26;
     }
     while (WEATHER_P.length < want)
     {
         WEATHER_P.push({
             x: Math.random() * (VIEW.w + 60) - 30,
             y: Math.random() * VIEW.h,
-            v: S.weather === 'snow' ? 26 + Math.random() * 18 : 200 + Math.random() * 120,
+            v: S.weather === 'snow' ? 26 + Math.random() * 18
+                : (S.weather === 'wind' ? 40 + Math.random() * 50 : 200 + Math.random() * 120),
             sway: Math.random() * 6.28
         });
     }
@@ -17481,8 +18085,9 @@ function updateWeather(dt)
     for (i = 0; i < WEATHER_P.length; i++)
     {
         var p = WEATHER_P[i];
-        p.y += p.v * dt;
-        p.x += (S.weather === 'snow' ? Math.sin(p.sway + TICK * .02) * 8 : -30) * dt;
+        p.y += p.v * dt * (S.weather === 'wind' ? .35 : 1);
+        p.x += (S.weather === 'snow' ? Math.sin(p.sway + TICK * .02) * 8
+            : (S.weather === 'wind' ? -130 + Math.sin(p.sway + TICK * .03) * 30 : -30)) * dt;
         if (p.y > VIEW.h)
         {
             p.y = -6;
@@ -17583,31 +18188,35 @@ function render()
     // weather
     if (MAP.outdoor && WEATHER_P.length)
     {
-        var img = sprParticle(S.weather === 'snow' ? 'snow' : 'rain');
+        var wk = S.weather === 'snow' ? 'snow'
+            : (S.weather === 'wind' ? (seasonId() === 'fall' ? 'leaf_fall' : 'leaf') : 'rain');
+        var img = sprParticle(wk);
         for (i = 0; i < WEATHER_P.length; i++)
         {
-            g.drawImage(img, Math.round(WEATHER_P[i].x), Math.round(WEATHER_P[i].y));
+            var wp = WEATHER_P[i];
+            if (wk === 'leaf')
+            {
+                // tumbling leaves read as wind far better than falling streaks
+                g.save();
+                g.translate(Math.round(wp.x) + 6, Math.round(wp.y) + 6);
+                g.rotate(wp.sway + TICK * .06);
+                g.drawImage(img, -6, -6);
+                g.restore();
+            }
+            else
+            {
+                g.drawImage(img, Math.round(wp.x), Math.round(wp.y));
+            }
+        }
+        // rain leaves a wet sheen on the ground
+        if (S.weather === 'storm')
+        {
+            g.fillStyle = 'rgba(150,180,220,.05)';
+            g.fillRect(0, 0, VIEW.w, VIEW.h);
         }
     }
 
-    // night / indoor tint
-    var dk = MAP.outdoor ? darkness() : (MAP.id === 'mine' ? .35 : Math.min(.28, darkness()));
-    if (dk > .01)
-    {
-        g.fillStyle = 'rgba(18,20,52,' + dk + ')';
-        g.fillRect(0, 0, VIEW.w, VIEW.h);
-        // player light pool
-        var lg = g.createRadialGradient(S.px - cx, S.py - cy - 18, 10, S.px - cx, S.py - cy - 18, 118);
-        lg.addColorStop(0, 'rgba(255,225,150,' + (dk * .5) + ')');
-        lg.addColorStop(1, 'rgba(255,225,150,0)');
-        g.fillStyle = lg;
-        g.fillRect(S.px - cx - 120, S.py - cy - 138, 240, 240);
-    }
-    if (S.weather === 'storm' && MAP.outdoor && Math.random() < .004)
-    {
-        g.fillStyle = 'rgba(255,255,255,.5)';
-        g.fillRect(0, 0, VIEW.w, VIEW.h);
-    }
+    applyAmbient(g);
 
     // interaction hint
     drawHint(g);
@@ -17992,6 +18601,152 @@ function openMinecart()
         })(stops[i]);
     }
     openModal(m);
+}
+
+// ---------- ambient grading ----------
+// A flat navy rectangle at night was the only lighting cue in the game.
+// This washes the whole scene with a time-of-day colour plus a seasonal cast,
+// which is the cheapest thing that makes a pixel scene feel like a place.
+// [hour, tintRGB, tintAlpha, darkAlpha]
+// Interpolating straight from amber (18h) to purple (20h) crossed through a
+// muddy mauve at 19h -- exactly the hour that should look best. Keep the warm
+// key held until sunset, then move to purple quickly.
+var AMBIENT_KEYS = [
+    [6, [255, 148, 88], .30, .24],     // sunrise
+    [8, [255, 214, 168], .14, .05],    // morning
+    [11, [255, 255, 255], .00, .00],   // midday, neutral
+    [15, [255, 248, 222], .05, .00],
+    [17.5, [255, 176, 96], .20, .04],  // golden hour begins
+    [19.3, [255, 142, 74], .32, .14],  // golden hour, still warm
+    [20.4, [176, 112, 158], .28, .28], // sunset rolls into dusk
+    [21.5, [120, 96, 190], .26, .38],  // dusk
+    [23, [70, 85, 176], .22, .50],
+    [26, [38, 52, 138], .20, .60]      // deep night
+];
+
+var SEASON_CAST = {
+    spring: [[210, 255, 215], .05],
+    summer: [[255, 245, 200], .06],
+    fall: [[255, 210, 150], .10],
+    winter: [[200, 225, 255], .13]
+};
+
+function lerp(a, b, t)
+{
+    return a + (b - a) * t;
+}
+
+function ambientGrade()
+{
+    var h = S.time / 60;
+    var i, k0 = AMBIENT_KEYS[0], k1 = AMBIENT_KEYS[AMBIENT_KEYS.length - 1];
+    for (i = 0; i < AMBIENT_KEYS.length - 1; i++)
+    {
+        if (h >= AMBIENT_KEYS[i][0] && h <= AMBIENT_KEYS[i + 1][0])
+        {
+            k0 = AMBIENT_KEYS[i];
+            k1 = AMBIENT_KEYS[i + 1];
+            break;
+        }
+    }
+    var span = k1[0] - k0[0];
+    var t = span > 0 ? Math.max(0, Math.min(1, (h - k0[0]) / span)) : 0;
+    var tint = [
+        Math.round(lerp(k0[1][0], k1[1][0], t)),
+        Math.round(lerp(k0[1][1], k1[1][1], t)),
+        Math.round(lerp(k0[1][2], k1[1][2], t))
+    ];
+    var ta = lerp(k0[2], k1[2], t);
+    var dark = lerp(k0[3], k1[3], t);
+    return { tint: tint, ta: ta, dark: dark };
+}
+
+function applyAmbient(g)
+{
+    var W = VIEW.w, H = VIEW.h;
+    if (MAP.id === 'mine')
+    {
+        // caves have their own fixed mood: cold up top, ember-lit down deep
+        var deep = (MINE.skull || MINE.floor >= 80);
+        g.fillStyle = deep ? 'rgba(60,18,12,.30)' : 'rgba(20,26,44,.34)';
+        g.fillRect(0, 0, W, H);
+        g.fillStyle = 'rgba(8,8,18,.30)';
+        g.fillRect(0, 0, W, H);
+        lightPool(g, .55);
+        return;
+    }
+    if (!MAP.outdoor)
+    {
+        // indoors: no sunrise/sunset, just a warm lamp at night
+        var ih = S.time / 60;
+        if (ih >= 18 || ih < 7)
+        {
+            g.fillStyle = 'rgba(255,186,96,.10)';
+            g.fillRect(0, 0, W, H);
+            g.fillStyle = 'rgba(24,22,50,.22)';
+            g.fillRect(0, 0, W, H);
+        }
+        else
+        {
+            g.fillStyle = 'rgba(255,240,210,.06)';
+            g.fillRect(0, 0, W, H);
+        }
+        return;
+    }
+
+    var a = ambientGrade();
+    var cast = SEASON_CAST[seasonId()] || SEASON_CAST.spring;
+
+    // seasonal cast first, then the time-of-day wash
+    g.fillStyle = 'rgba(' + cast[0][0] + ',' + cast[0][1] + ',' + cast[0][2] + ',' + cast[1] + ')';
+    g.fillRect(0, 0, W, H);
+    if (a.ta > .005)
+    {
+        g.fillStyle = 'rgba(' + a.tint[0] + ',' + a.tint[1] + ',' + a.tint[2] + ',' + a.ta + ')';
+        g.fillRect(0, 0, W, H);
+    }
+    // rain drains the colour and cools it
+    if (isRaining())
+    {
+        g.fillStyle = 'rgba(96,112,140,.20)';
+        g.fillRect(0, 0, W, H);
+    }
+    if (a.dark > .005)
+    {
+        g.fillStyle = 'rgba(16,20,52,' + a.dark + ')';
+        g.fillRect(0, 0, W, H);
+    }
+    // vignette grows with darkness so night feels enclosed
+    var vig = a.dark * .7 + (isRaining() ? .12 : 0);
+    if (vig > .04)
+    {
+        var vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .32,
+            W / 2, H / 2, Math.max(W, H) * .72);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, 'rgba(6,8,24,' + vig + ')');
+        g.fillStyle = vg;
+        g.fillRect(0, 0, W, H);
+    }
+    if (a.dark > .12)
+    {
+        lightPool(g, a.dark);
+    }
+    if (S.weather === 'storm' && Math.random() < .005)
+    {
+        g.fillStyle = 'rgba(226,238,255,.45)';
+        g.fillRect(0, 0, W, H);
+    }
+}
+
+function lightPool(g, strength)
+{
+    var px = S.px - CAM.x, py = S.py - CAM.y - 18;
+    var lg = g.createRadialGradient(px, py, 8, px, py, 130);
+    lg.addColorStop(0, 'rgba(255,228,158,' + (strength * .5) + ')');
+    lg.addColorStop(.55, 'rgba(255,214,140,' + (strength * .18) + ')');
+    lg.addColorStop(1, 'rgba(255,214,140,0)');
+    g.fillStyle = lg;
+    g.fillRect(px - 132, py - 132, 264, 264);
 }
 
 </script>
