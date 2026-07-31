@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.8';
+var GAME_VER = '2.9';
 
 // ---------- core constants ----------
 
@@ -3368,14 +3368,21 @@ function tileWater(frame, deep, variant)
     });
 }
 
-function tileStoneFloor(variant)
+function tileStoneFloor(variant, col, style)
 {
     variant = variant || 0;
-    return bake('t:sfloor:' + variant, TILE, TILE, function (g)
+    col = col || '#ab9b83';
+    style = style || 'flag';
+    return bake('t:sfloor:' + variant + ':' + col + ':' + style, TILE, TILE, function (g)
     {
+        if (style === 'checker')
+        {
+            drawCheckerFloor(g, col, variant);
+            return;
+        }
         // warm irregular flagstones. slab tones stay close together on purpose:
         // a big tone gap here reads as a chessboard, not as paving.
-        var base = '#ab9b83';
+        var base = col;
         pr(g, 0, 0, TILE, TILE, tone(base, -1.8));
         // four flagstone layouts so a plaza does not read as graph paper
         var sets = [
@@ -3400,15 +3407,16 @@ function tileStoneFloor(variant)
     });
 }
 
-function tileWoodFloor(variant)
+function tileWoodFloor(variant, col)
 {
     variant = variant || 0;
-    return bake('t:wfloor:' + variant, TILE, TILE, function (g)
+    col = col || '#b07f4a';
+    return bake('t:wfloor:' + variant + ':' + col, TILE, TILE, function (g)
     {
         // A 2px dark seam every 8px, plus an end joint in every row, turned a
         // wooden floor into brickwork lying on its side. Boards are wider, the
         // seams are one soft pixel, and most tiles carry no end joint at all.
-        var base = '#b07f4a';
+        var base = col;
         pr(g, 0, 0, TILE, TILE, base);
         var y, row = 0;
         for (y = 0; y < TILE; y += 8)
@@ -3435,12 +3443,13 @@ function tileWoodFloor(variant)
     });
 }
 
-function tileCarpet(variant)
+function tileCarpet(variant, col)
 {
     variant = variant || 0;
-    return bake('t:carpet:' + variant, TILE, TILE, function (g)
+    col = col || '#6a4a8a';
+    return bake('t:carpet:' + variant + ':' + col, TILE, TILE, function (g)
     {
-        var base = '#6a4a8a';
+        var base = col;
         pr(g, 0, 0, TILE, TILE, base);
         dither(g, 0, 0, TILE, TILE, base, tone(base, -.6), .4);
         // woven pile: short diagonal strokes, not noise
@@ -6431,29 +6440,57 @@ function sprBuoy(tick)
 
 function sprNet()
 {
-    return bake('net', 40, 36, function (g)
+    // The first version was a mesh stretched between two poles, which read as a
+    // lobster trap. A drying net hangs and sags: a slack top rope, long strands
+    // falling from it, and floats along the line.
+    return bake('net', 44, 40, function (g)
     {
-        var p = '#6d5030', n = '#c8b98e';
-        contactShadow(g, 20, 33, 16, 4);
-        drawLimb(g, 9, 32, 14, 4, 5, 3, p);
-        drawLimb(g, 31, 32, 26, 4, 5, 3, p);
-        pr(g, 12, 4, 16, 3, p);
+        var p = '#6d5030', n = '#d8cba4';
+        contactShadow(g, 22, 37, 16, 4);
+        // two leaning poles
+        drawLimb(g, 7, 36, 5, 6, 5, 3, p);
+        drawLimb(g, 37, 36, 39, 6, 5, 3, p);
+        // the rope between them sags
         var i, j;
-        for (j = 0; j < 5; j++)
+        for (i = 5; i <= 39; i++)
         {
-            var wgt = 8 + j * 5;
-            for (i = 0; i < 6; i++)
-            {
-                var mx = 11 + i * 4 + Math.round(Math.sin((i + j) * .9));
-                pr(g, mx, wgt, 1, 5, n);
-            }
-            pr(g, 11, wgt, 22, 1, n);
+            var t = (i - 5) / 34;
+            var sag = Math.round(Math.sin(t * Math.PI) * 4);
+            pr(g, i, 6 + sag, 1, 2, p);
         }
-        pe(g, 22, 27, 4, 3, '#8fa8c0');
-        pe(g, 21, 26, 2, 2, '#c8dcec');
+        // strands hanging off it, each a different length
+        for (i = 0; i < 12; i++)
+        {
+            var sx = 6 + i * 3;
+            var t2 = (sx - 5) / 34;
+            var top = 8 + Math.round(Math.sin(t2 * Math.PI) * 4);
+            var len = 12 + Math.floor(hash2(i, 3, 431) * 12);
+            for (j = 0; j < len; j++)
+            {
+                // a slight waver so it hangs like rope, not wire
+                var wob = Math.round(Math.sin(j * .5 + i) * .8);
+                pr(g, sx + wob, top + j, 1, 1, (j % 4 === 0) ? tone(n, -1) : n);
+            }
+        }
+        // horizontal knots tie the strands into a mesh
+        for (j = 0; j < 3; j++)
+        {
+            var ky = 13 + j * 7;
+            for (i = 6; i < 40; i += 3)
+            {
+                pr(g, i, ky + Math.round(Math.sin((i - 5) / 34 * Math.PI) * 3), 2, 1, tone(n, -.7));
+            }
+        }
+        // cork floats along the top
+        for (i = 0; i < 4; i++)
+        {
+            var fx = 9 + i * 9;
+            var ft = (fx - 5) / 34;
+            pe(g, fx, 7 + Math.round(Math.sin(ft * Math.PI) * 4), 3, 2, '#c86a3a');
+            pr(g, fx - 1, 6 + Math.round(Math.sin(ft * Math.PI) * 4), 1, 1, '#e08a54');
+        }
     }, { outline: true });
 }
-
 function sprSignpost(dirs)
 {
     return bake('signpost:' + dirs, 34, 46, function (g)
@@ -6999,6 +7036,47 @@ function sprJelly(f)
     });
 }
 
+// A clinic and a museum should not have the same flagstones as the town square.
+// Big square tiles laid on the diagonal, with a grout line and a soft sheen.
+function drawCheckerFloor(g, col, variant)
+{
+    var a = tone(col, .5), b = tone(col, -.9);
+    pr(g, 0, 0, TILE, TILE, a);
+    var i, j;
+    for (j = 0; j < 2; j++)
+    {
+        for (i = 0; i < 2; i++)
+        {
+            if ((i + j) % 2 === 0)
+            {
+                continue;
+            }
+            pr(g, i * 16, j * 16, 16, 16, b);
+        }
+    }
+    // grout
+    pr(g, 0, 15, TILE, 2, tone(col, -2));
+    pr(g, 15, 0, 2, TILE, tone(col, -2));
+    // a lit edge on each tile so they read as laid, not painted
+    for (j = 0; j < 2; j++)
+    {
+        for (i = 0; i < 2; i++)
+        {
+            var c = ((i + j) % 2 === 0) ? a : b;
+            pr(g, i * 16, j * 16, 15, 1, tone(c, 1.2));
+            pr(g, i * 16, j * 16, 1, 15, tone(c, .8));
+            pr(g, i * 16, j * 16 + 14, 15, 1, tone(c, -1.3));
+        }
+    }
+    // faint wear, different per tile position
+    for (i = 0; i < 5; i++)
+    {
+        var wx = Math.floor(hash2(i, variant, 421) * TILE);
+        var wy = Math.floor(hash2(variant, i, 423) * TILE);
+        pr(g, wx, wy, 2, 1, tone(col, -.5));
+    }
+}
+
 
 /* ===== world.js ===== */
 
@@ -7268,7 +7346,7 @@ var MAPS = {
 // generated from a compact template: floor style, wall color, furniture list.
 
 var INTERIORS = {
-    farmhouse: { name: '우리 집', w: 18, h: 12, floor: T_WOOD, wall: '#d8b88c', paper: 'stripe',
+    farmhouse: { name: '우리 집', w: 18, h: 12, floor: T_WOOD, floorCol: '#b98a52', wall: '#d8b88c', paper: 'stripe',
         rugs: [{ c: 'red', x: 7, y: 7 }],
         f: [{ k: 'bed', x: 14, y: 2 }, { k: 'tv', x: 2, y: 2 }, { k: 'table', x: 8, y: 5 },
             { k: 'kitchen', x: 2, y: 6 }, { k: 'chest', x: 12, y: 8 }, { k: 'calendar', x: 6, y: 1 },
@@ -7276,12 +7354,12 @@ var INTERIORS = {
             { k: 'stool', x: 7, y: 8 }, { k: 'books', x: 2, y: 9 },
             { k: 'window', x: 3, y: 1 }, { k: 'window', x: 11, y: 1 }, { k: 'fireplace', x: 8, y: 1 }, { k: 'clock', x: 16, y: 1 }],
         exit: { x: 8, y: 11, to: 'farm', tx: 21, ty: 10 } },
-    greenhouse: { name: '온실', w: 20, h: 14, floor: T_STONE, wall: '#a8c8b8', paper: 'tile',
+    greenhouse: { name: '온실', w: 20, h: 14, floor: T_STONE, floorCol: '#c8d4c4', floorStyle: 'checker', wall: '#a8c8b8', paper: 'tile',
         f: [{ k: 'plant', x: 2, y: 2 }, { k: 'plant', x: 17, y: 2 }, { k: 'crate', x: 2, y: 11 },
             { k: 'window', x: 8, y: 1 }],
         till: { x: 3, y: 3, w: 14, h: 9 },
         exit: { x: 10, y: 13, to: 'farm', tx: 12, ty: 10 } },
-    pierre_shop: { name: '피에르 잡화점', w: 18, h: 12, floor: T_WOOD, wall: '#e0cda6', paper: 'plank',
+    pierre_shop: { name: '피에르 잡화점', w: 18, h: 12, floor: T_WOOD, floorCol: '#c09256', wall: '#e0cda6', paper: 'plank',
         rugs: [{ c: 'green', x: 7, y: 8 }],
         f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }, { k: 'shelf', x: 14, y: 2 },
             { k: 'goods', x: 2, y: 5 }, { k: 'goods', x: 14, y: 5 }, { k: 'crate', x: 2, y: 9 },
@@ -7289,7 +7367,7 @@ var INTERIORS = {
             { k: 'window', x: 4, y: 1 }, { k: 'window', x: 12, y: 1 }, { k: 'clock', x: 7, y: 1 }],
         shop: 'pierre', npc: { id: 'pierre', x: 9, y: 5 },
         exit: { x: 8, y: 11, to: 'town', tx: 15, ty: 12 } },
-    saloon: { name: '스타드롭 살롱', w: 20, h: 12, floor: T_WOOD, wall: '#a86848', paper: 'brick',
+    saloon: { name: '스타드롭 살롱', w: 20, h: 12, floor: T_WOOD, floorCol: '#8a5a30', wall: '#a86848', paper: 'brick',
         rugs: [{ c: 'purple', x: 13, y: 8 }],
         f: [{ k: 'counter', x: 4, y: 3 }, { k: 'table', x: 12, y: 5 }, { k: 'table', x: 16, y: 8 },
             { k: 'stool', x: 4, y: 6 }, { k: 'stool', x: 6, y: 6 }, { k: 'stool', x: 8, y: 6 },
@@ -7298,13 +7376,13 @@ var INTERIORS = {
             { k: 'window', x: 6, y: 1 }, { k: 'bottles', x: 2, y: 3 }, { k: 'dartboard', x: 17, y: 1 }, { k: 'fireplace', x: 12, y: 1 }],
         shop: 'saloon', npc: { id: 'gus', x: 5, y: 6 },
         exit: { x: 10, y: 11, to: 'town', tx: 27, ty: 12 } },
-    clinic: { name: '해비 병원', w: 16, h: 11, floor: T_STONE, wall: '#e4eef2', paper: 'tile',
+    clinic: { name: '해비 병원', w: 16, h: 11, floor: T_STONE, floorCol: '#dfe7ea', floorStyle: 'checker', wall: '#e4eef2', paper: 'tile',
         f: [{ k: 'counter', x: 7, y: 3 }, { k: 'bed', x: 12, y: 3 }, { k: 'plant', x: 2, y: 2 },
             { k: 'books', x: 2, y: 8 }, { k: 'painting', x: 5, y: 1 }, { k: 'lamp', x: 11, y: 7 },
             { k: 'window', x: 2, y: 1 }, { k: 'window', x: 13, y: 1 }, { k: 'clock', x: 10, y: 1 }],
         npc: { id: 'harvey', x: 8, y: 5 }, heal: true,
         exit: { x: 7, y: 10, to: 'town', tx: 47, ty: 14 } },
-    center: { name: '커뮤니티 센터', w: 24, h: 16, floor: T_WOOD, wall: '#c8bca0', paper: 'plank',
+    center: { name: '커뮤니티 센터', w: 24, h: 16, floor: T_WOOD, floorCol: '#a8804c', wall: '#c8bca0', paper: 'plank',
         rugs: [{ c: 'blue', x: 10, y: 11 }],
         f: [{ k: 'plant', x: 2, y: 2 }, { k: 'plant', x: 21, y: 2 }, { k: 'crate', x: 3, y: 13 },
             { k: 'crate', x: 20, y: 13 }, { k: 'painting', x: 11, y: 1 }, { k: 'lamp', x: 5, y: 6 },
@@ -7312,72 +7390,72 @@ var INTERIORS = {
             { k: 'window', x: 5, y: 1 }, { k: 'window', x: 17, y: 1 }, { k: 'fireplace', x: 14, y: 1 }, { k: 'clock', x: 8, y: 1 }],
         bundleRoom: true,
         exit: { x: 12, y: 15, to: 'town', tx: 8, ty: 11 } },
-    blacksmith: { name: '클린트 대장간', w: 16, h: 11, floor: T_STONE, wall: '#9a8a7a', paper: 'brick',
+    blacksmith: { name: '클린트 대장간', w: 16, h: 11, floor: T_STONE, floorCol: '#8a8078', wall: '#9a8a7a', paper: 'brick',
         f: [{ k: 'counter', x: 7, y: 3 }, { k: 'forge', x: 12, y: 3 }, { k: 'crate', x: 2, y: 2 },
             { k: 'crate', x: 2, y: 8 }, { k: 'barrel', x: 4, y: 8 }, { k: 'goods', x: 4, y: 1 },
             { k: 'window', x: 2, y: 1 }, { k: 'anvil', x: 11, y: 7 }, { k: 'lumber', x: 13, y: 8 }],
         shop: 'clint', npc: { id: 'clint', x: 8, y: 5 },
         exit: { x: 7, y: 10, to: 'town', tx: 48, ty: 36 } },
-    museum: { name: '박물관 · 도서관', w: 20, h: 12, floor: T_STONE, wall: '#d0c8b0', paper: 'floral',
+    museum: { name: '박물관 · 도서관', w: 20, h: 12, floor: T_STONE, floorCol: '#d8cfb4', floorStyle: 'checker', wall: '#d0c8b0', paper: 'floral',
         rugs: [{ c: 'red', x: 8, y: 8 }],
         f: [{ k: 'books', x: 3, y: 2 }, { k: 'books', x: 8, y: 2 }, { k: 'books', x: 13, y: 2 },
-            { k: 'painting', x: 2, y: 6 }, { k: 'painting', x: 16, y: 6 }, { k: 'plant', x: 18, y: 9 },
+            { k: 'painting', x: 2, y: 1 }, { k: 'painting', x: 15, y: 1 }, { k: 'plant', x: 18, y: 9 },
             { k: 'goods', x: 5, y: 5 }, { k: 'lamp', x: 12, y: 6 },
             { k: 'window', x: 18, y: 1 }, { k: 'pedestal', x: 4, y: 7 }, { k: 'pedestal', x: 7, y: 7 }, { k: 'pedestal', x: 12, y: 7 }, { k: 'pedestal', x: 15, y: 7 }],
         museum: true, npc: { id: 'gunther', x: 17, y: 4 },
         exit: { x: 10, y: 11, to: 'town', tx: 47, ty: 22 } },
-    carpenter: { name: '로빈 목공소', w: 18, h: 12, floor: T_WOOD, wall: '#c8a878', paper: 'plank',
+    carpenter: { name: '로빈 목공소', w: 18, h: 12, floor: T_WOOD, floorCol: '#c49a5e', wall: '#c8a878', paper: 'plank',
         f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }, { k: 'crate', x: 2, y: 8 },
             { k: 'crate', x: 4, y: 8 }, { k: 'crate', x: 15, y: 8 }, { k: 'goods', x: 14, y: 1 },
             { k: 'plant', x: 16, y: 5 },
             { k: 'window', x: 5, y: 1 }, { k: 'sawhorse', x: 12, y: 6 }, { k: 'lumber', x: 6, y: 8 }, { k: 'lumber', x: 8, y: 8 }],
         shop: 'robin', npc: { id: 'robin', x: 9, y: 5 },
         exit: { x: 9, y: 11, to: 'mountain', tx: 7, ty: 26 } },
-    ranch: { name: '마니 목장', w: 18, h: 12, floor: T_WOOD, wall: '#c8b898', paper: 'plank',
+    ranch: { name: '마니 목장', w: 18, h: 12, floor: T_WOOD, floorCol: '#b8946a', wall: '#c8b898', paper: 'plank',
         f: [{ k: 'counter', x: 8, y: 3 }, { k: 'hay', x: 14, y: 6 }, { k: 'crate', x: 2, y: 8 },
             { k: 'barrel', x: 2, y: 2 }, { k: 'goods', x: 4, y: 1 }, { k: 'plant', x: 16, y: 9 },
             { k: 'window', x: 5, y: 1 }, { k: 'milkcan', x: 12, y: 8 }, { k: 'milkcan', x: 14, y: 8 }, { k: 'lumber', x: 6, y: 8 }],
         shop: 'marnie', npc: { id: 'marnie', x: 9, y: 5 },
         exit: { x: 9, y: 11, to: 'forest', tx: 37, ty: 14 } },
-    fishshop: { name: '윌리 낚시가게', w: 16, h: 11, floor: T_WOOD, wall: '#a8b8c8', paper: 'plank',
+    fishshop: { name: '윌리 낚시가게', w: 16, h: 11, floor: T_WOOD, floorCol: '#9a8a70', wall: '#a8b8c8', paper: 'plank',
         f: [{ k: 'counter', x: 7, y: 3 }, { k: 'barrel', x: 12, y: 6 }, { k: 'barrel', x: 2, y: 6 },
             { k: 'crate', x: 2, y: 2 }, { k: 'goods', x: 4, y: 1 }, { k: 'painting', x: 12, y: 1 },
-            { k: 'window', x: 2, y: 1 }, { k: 'window', x: 12, y: 4 }, { k: 'crate', x: 13, y: 8 }],
+            { k: 'window', x: 2, y: 1 }, { k: 'window', x: 8, y: 1 }, { k: 'crate', x: 13, y: 8 }],
         shop: 'willy', npc: { id: 'willy', x: 8, y: 5 },
         exit: { x: 7, y: 10, to: 'beach', tx: 42, ty: 14 } },
-    guild: { name: '모험가 길드', w: 16, h: 11, floor: T_STONE, wall: '#8a7a6a', paper: 'brick',
+    guild: { name: '모험가 길드', w: 16, h: 11, floor: T_STONE, floorCol: '#7f7468', wall: '#8a7a6a', paper: 'brick',
         rugs: [{ c: 'red', x: 6, y: 7 }],
         f: [{ k: 'counter', x: 7, y: 3 }, { k: 'forge', x: 12, y: 3 }, { k: 'crate', x: 2, y: 2 },
             { k: 'lamp', x: 2, y: 7 }, { k: 'painting', x: 4, y: 1 },
-            { k: 'window', x: 2, y: 4 }, { k: 'anvil', x: 12, y: 7 }, { k: 'dartboard', x: 10, y: 1 }],
+            { k: 'window', x: 6, y: 1 }, { k: 'anvil', x: 12, y: 7 }, { k: 'dartboard', x: 10, y: 1 }],
         guild: true, npc: { id: 'marlon', x: 8, y: 5 },
         exit: { x: 7, y: 10, to: 'mountain', tx: 36, ty: 33 } },
-    wizard: { name: '마법사의 탑', w: 14, h: 11, floor: T_CARPET, wall: '#6a5a8a', paper: 'floral',
+    wizard: { name: '마법사의 탑', w: 14, h: 11, floor: T_CARPET, floorCol: '#5a3a80', wall: '#6a5a8a', paper: 'floral',
         rugs: [{ c: 'purple', x: 5, y: 7 }],
         f: [{ k: 'books', x: 2, y: 2 }, { k: 'orb', x: 10, y: 3 }, { k: 'books', x: 10, y: 7 },
             { k: 'lamp', x: 2, y: 7 }, { k: 'plant', x: 12, y: 5 },
             { k: 'window', x: 6, y: 1 }, { k: 'clock', x: 2, y: 5 }],
         npc: { id: 'wizard', x: 7, y: 5 },
         exit: { x: 7, y: 10, to: 'forest', tx: 46, ty: 39 } },
-    house_alex: { name: '알렉스네 집', w: 14, h: 10, floor: T_WOOD, wall: '#d8c0a0', paper: 'stripe',
+    house_alex: { name: '알렉스네 집', w: 14, h: 10, floor: T_WOOD, floorCol: '#b98a52', wall: '#d8c0a0', paper: 'stripe',
         rugs: [{ c: 'blue', x: 5, y: 6 }],
         f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'tv', x: 2, y: 2 },
             { k: 'plant', x: 12, y: 7 }, { k: 'painting', x: 8, y: 1 },
             { k: 'window', x: 4, y: 1 }, { k: 'clock', x: 2, y: 6 }],
         exit: { x: 7, y: 9, to: 'town', tx: 10, ty: 35 } },
-    house_haley: { name: '헤일리네 집', w: 14, h: 10, floor: T_WOOD, wall: '#e8d0d8', paper: 'floral',
+    house_haley: { name: '헤일리네 집', w: 14, h: 10, floor: T_WOOD, floorCol: '#c8a070', wall: '#e8d0d8', paper: 'floral',
         rugs: [{ c: 'purple', x: 5, y: 6 }],
         f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'painting', x: 2, y: 1 },
             { k: 'lamp', x: 2, y: 6 }, { k: 'plant', x: 12, y: 7 },
             { k: 'window', x: 5, y: 1 }, { k: 'window', x: 9, y: 1 }],
         exit: { x: 7, y: 9, to: 'town', tx: 18, ty: 37 } },
-    house_sam: { name: '샘네 집', w: 14, h: 10, floor: T_WOOD, wall: '#d0d8e8', paper: 'stripe',
+    house_sam: { name: '샘네 집', w: 14, h: 10, floor: T_WOOD, floorCol: '#a87f4e', wall: '#d0d8e8', paper: 'stripe',
         rugs: [{ c: 'green', x: 5, y: 6 }],
         f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'books', x: 2, y: 2 },
             { k: 'stool', x: 2, y: 7 }, { k: 'painting', x: 8, y: 1 },
             { k: 'window', x: 4, y: 1 }, { k: 'dartboard', x: 10, y: 1 }],
         exit: { x: 7, y: 9, to: 'town', tx: 28, ty: 35 } },
-    house_leah: { name: '리아의 오두막', w: 14, h: 10, floor: T_WOOD, wall: '#c8b090', paper: 'plank',
+    house_leah: { name: '리아의 오두막', w: 14, h: 10, floor: T_WOOD, floorCol: '#ae8048', wall: '#c8b090', paper: 'plank',
         rugs: [{ c: 'red', x: 5, y: 6 }],
         f: [{ k: 'table', x: 6, y: 3 }, { k: 'bed', x: 11, y: 2 }, { k: 'crate', x: 2, y: 2 },
             { k: 'plant', x: 12, y: 7 }, { k: 'painting', x: 8, y: 1 }, { k: 'lamp', x: 2, y: 6 },
@@ -7386,6 +7464,8 @@ var INTERIORS = {
 };
 
 // ---------- map building ----------
+
+var INTERIOR_WALL_ROWS = 2;
 
 var MAP_CACHE = {};
 
@@ -7580,7 +7660,9 @@ function buildInterior(id)
     {
         m.tiles[i] = d.floor;
     }
-    fillRect(m, 0, 0, d.w, 2, T_WALL);
+    // The top wall is two rows. Window sills and wall-hung props are drawn
+    // against that, so it is a constant rather than a magic number.
+    fillRect(m, 0, 0, d.w, INTERIOR_WALL_ROWS, T_WALL);
     fillRect(m, 0, 0, 1, d.h, T_WALL);
     fillRect(m, d.w - 1, 0, 1, d.h, T_WALL);
     fillRect(m, 0, d.h - 1, d.w, 1, T_WALL);
@@ -8092,11 +8174,14 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_STONE)
                 {
-                    img = tileStoneFloor(Math.floor(hash2(x, y, 53) * 8));
+                    img = tileStoneFloor(Math.floor(hash2(x, y, 53) * 8),
+                        m.interior && m.interior.floorCol,
+                        m.interior && m.interior.floorStyle);
                 }
                 else if (t === T_WOOD || t === T_BRIDGE)
                 {
-                    img = tileWoodFloor(Math.floor(hash2(x, y, 59) * 4));
+                    img = tileWoodFloor(Math.floor(hash2(x, y, 59) * 4),
+                        m.interior && m.interior.floorCol);
                 }
                 else if (t === T_PATH)
                 {
@@ -8116,7 +8201,8 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_CARPET)
                 {
-                    img = tileCarpet(Math.floor(hash2(x, y, 67) * 3));
+                    img = tileCarpet(Math.floor(hash2(x, y, 67) * 3),
+                        m.interior && m.interior.floorCol);
                 }
                 else if (t === T_CLIFF)
                 {
@@ -8629,7 +8715,7 @@ function drawObject(g, o, cam, season, tick)
             g.drawImage(sprBuoy(tick), x + 4, y + TILE - 34);
             break;
         case 'net':
-            g.drawImage(sprNet(), x - 4, y + TILE - 36);
+            g.drawImage(sprNet(), x - 6, y + TILE - 40);
             break;
         case 'signpost':
             g.drawImage(sprSignpost(o.dirs || 2), x - 1, y + TILE - 46);
@@ -14307,7 +14393,7 @@ MAPS.quarry = {
 };
 
 INTERIORS.oasis = {
-    name: '오아시스', w: 16, h: 11, floor: T_STONE, wall: '#d8c090', paper: 'tile',
+    name: '오아시스', w: 16, h: 11, floor: T_STONE, floorCol: '#e0cba0', floorStyle: 'checker', wall: '#d8c090', paper: 'tile',
     rugs: [{ c: 'purple', x: 6, y: 7 }],
     f: [{ k: 'counter', x: 7, y: 3 }, { k: 'goods', x: 3, y: 1 }, { k: 'plant', x: 2, y: 7 },
         { k: 'crate', x: 13, y: 7 }, { k: 'painting', x: 12, y: 1 },
