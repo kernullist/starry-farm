@@ -1192,7 +1192,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.3';
+var GAME_VER = '2.4';
 
 // ---------- core constants ----------
 
@@ -6477,6 +6477,460 @@ function sprDriftwood()
         pe(g, 6, 15, 3, 3, tone(w, -1.8));
         pe(g, 39, 12, 3, 3, tone(w, -1.8));
     }, { outline: true });
+}
+
+// ---------- festival props ----------
+// Only drawn while a festival is running. See src/festival.js.
+
+function sprBanner(text)
+{
+    return bake('banner:' + text, 128, 44, function (g)
+    {
+        var cl = '#c8443a';
+        // rope
+        pr(g, 0, 3, 128, 2, '#8a6a44');
+        // cloth with a scalloped hem
+        pr(g, 4, 5, 120, 28, cl);
+        pr(g, 4, 5, 120, 3, tone(cl, 1.3));
+        pr(g, 4, 30, 120, 3, tone(cl, -1.6));
+        var i;
+        for (i = 4; i < 124; i += 8)
+        {
+            pe(g, i + 4, 33, 4, 3, tone(cl, -1.2));
+        }
+        // gold trim
+        pr(g, 8, 9, 112, 1, '#f0d24a');
+        pr(g, 8, 28, 112, 1, '#d8a838');
+        // lettering blocks: readable as writing at this size, not as text
+        var n = Math.min(9, Math.max(4, (text || '').length));
+        var w = n * 10;
+        var sx = 64 - w / 2;
+        for (i = 0; i < n; i++)
+        {
+            var bx = sx + i * 10;
+            pr(g, bx, 14, 7, 10, '#f4ecd8');
+            pr(g, bx + 1, 16, 5, 1, tone(cl, -1));
+            pr(g, bx + 1, 19, 5, 1, tone(cl, -1));
+            pr(g, bx + 2, 14, 1, 10, tone(cl, -.6));
+        }
+    }, { outline: true });
+}
+
+function sprBunting(alt)
+{
+    return bake('bunting:' + alt, 128, 30, function (g)
+    {
+        pr(g, 0, 2, 128, 2, '#8a6a44');
+        var cols = ['#d8564a', '#f0c24a', '#5aa8d8', '#6ab86a', '#b06ad8'];
+        var i;
+        for (i = 0; i < 8; i++)
+        {
+            var fx = i * 16 + 2;
+            var dip = Math.round(Math.sin(i * .9) * 2);
+            var c = cols[(i + alt) % cols.length];
+            var t;
+            for (t = 0; t < 12; t++)
+            {
+                var w = 12 - t;
+                pr(g, fx + t / 2, 4 + t + dip, w, 1, t < 3 ? tone(c, 1.2) : c);
+            }
+            pr(g, fx, 4 + dip, 12, 1, tone(c, 1.5));
+        }
+    }, { outline: true });
+}
+
+function sprLanternString(phase)
+{
+    return bake('lstring:' + phase, 96, 34, function (g)
+    {
+        pr(g, 0, 2, 96, 2, '#6a5238');
+        var cols = ['#f0a848', '#f4d060', '#e87a58'];
+        var i;
+        for (i = 0; i < 4; i++)
+        {
+            var lx = 10 + i * 24;
+            var dip = Math.round(Math.sin(i * 1.1) * 2);
+            var c = cols[(i + phase) % cols.length];
+            pr(g, lx + 5, 4 + dip, 2, 4, '#6a5238');
+            pe(g, lx + 6, 14 + dip, 7, 8, c);
+            pe(g, lx + 4, 12 + dip, 4, 4, tone(c, 1.4));
+            pr(g, lx + 2, 8 + dip, 9, 2, tone(c, -1.2));
+            pr(g, lx + 2, 19 + dip, 9, 2, tone(c, -1.2));
+            pr(g, lx + 5, 22 + dip, 3, 3, '#8a6a44');
+        }
+    }, { outline: true });
+}
+
+function sprStall(col)
+{
+    return bake('stall:' + col, 80, 64, function (g)
+    {
+        var wd = '#8a6238';
+        contactShadow(g, 40, 61, 30, 5);
+        // posts
+        pr(g, 5, 26, 5, 34, wd);
+        pr(g, 70, 26, 5, 34, wd);
+        pr(g, 5, 26, 2, 34, tone(wd, 1.1));
+        // counter
+        pr(g, 6, 42, 68, 7, wd);
+        pr(g, 6, 42, 68, 2, tone(wd, 1.3));
+        pr(g, 6, 47, 68, 2, tone(wd, -1.7));
+        pr(g, 10, 49, 60, 11, tone(wd, -.8));
+        // striped awning
+        var i;
+        for (i = 0; i < 9; i++)
+        {
+            var c = (i % 2) ? col : '#f2ead8';
+            var t;
+            for (t = 0; t < 18; t++)
+            {
+                pr(g, 2 + i * 8 + Math.round(t * .1), 8 + t, 8, 1, t < 3 ? tone(c, 1.2) : c);
+            }
+        }
+        pr(g, 0, 6, 80, 4, wd);
+        pr(g, 0, 6, 80, 1, tone(wd, 1.4));
+        // scalloped hem
+        for (i = 0; i < 10; i++)
+        {
+            pe(g, 4 + i * 8, 26, 4, 3, (i % 2) ? col : '#f2ead8');
+        }
+        // goods on the counter
+        for (i = 0; i < 5; i++)
+        {
+            var gx = 12 + i * 12;
+            var gc = ['#d85a4a', '#f0c24a', '#6ab86a', '#5aa8d8', '#b06ad8'][i];
+            pe(g, gx + 3, 39, 4, 4, gc);
+            pe(g, gx + 2, 38, 2, 2, tone(gc, 1.4));
+        }
+    }, { outline: true });
+}
+
+function sprFeastTable()
+{
+    return bake('feasttable', 80, 44, function (g)
+    {
+        var wd = '#8a6238', cloth = '#e8dcc0';
+        contactShadow(g, 40, 41, 30, 5);
+        pr(g, 8, 26, 5, 14, wd);
+        pr(g, 67, 26, 5, 14, wd);
+        pr(g, 2, 14, 76, 10, cloth);
+        pr(g, 2, 14, 76, 3, tone(cloth, 1.2));
+        pr(g, 2, 22, 76, 2, tone(cloth, -1.4));
+        // hanging cloth with a scalloped hem
+        pr(g, 4, 24, 72, 6, tone(cloth, -.6));
+        var i;
+        for (i = 0; i < 9; i++)
+        {
+            pe(g, 8 + i * 8, 30, 4, 3, tone(cloth, -1.1));
+            pr(g, 6 + i * 8, 16, 1, 8, tone(cloth, -.9));
+        }
+        // dishes
+        for (i = 0; i < 4; i++)
+        {
+            var dx = 12 + i * 17;
+            pe(g, dx + 6, 12, 7, 4, '#f6f2e6');
+            pe(g, dx + 6, 11, 5, 3, ['#d85a4a', '#f0c24a', '#6ab86a', '#c88a4a'][i]);
+            pr(g, dx, 13, 13, 1, tone('#f6f2e6', -1.6));
+        }
+    }, { outline: true });
+}
+
+function sprSoupPot(tick)
+{
+    var st = (tick >> 3) % 3;
+    return bake('souppot:' + st, 64, 60, function (g)
+    {
+        var iron = '#4a4650';
+        contactShadow(g, 32, 57, 22, 5);
+        // fire under it
+        var f = st;
+        pe(g, 32, 48 - f, 12, 8, '#e8621e');
+        pe(g, 32, 50 - f, 8, 5, '#f4a12a');
+        // legs and body
+        pr(g, 12, 42, 5, 12, iron);
+        pr(g, 47, 42, 5, 12, iron);
+        pe(g, 32, 34, 24, 16, iron);
+        pe(g, 32, 32, 22, 13, tone(iron, .8));
+        pr(g, 8, 22, 48, 6, iron);
+        pr(g, 8, 22, 48, 2, tone(iron, 1.2));
+        // soup
+        pe(g, 32, 24, 20, 4, '#c8823a');
+        pe(g, 28, 23, 8, 2, '#e0a052');
+        // steam
+        var i;
+        for (i = 0; i < 3; i++)
+        {
+            var sy = 6 + ((st * 4 + i * 6) % 14);
+            pe(g, 24 + i * 8, sy, 4, 3, 'rgba(240,240,240,.4)');
+        }
+        // ladle
+        pr(g, 44, 10, 3, 16, '#8a6238');
+        pe(g, 45, 26, 5, 3, iron);
+    }, { outline: true });
+}
+
+function sprFlowerArch()
+{
+    return bake('flowerarch', 96, 80, function (g)
+    {
+        var wd = '#7d5a34';
+        contactShadow(g, 20, 77, 10, 4);
+        contactShadow(g, 76, 77, 10, 4);
+        pr(g, 16, 22, 7, 54, wd);
+        pr(g, 73, 22, 7, 54, wd);
+        pr(g, 16, 22, 2, 54, tone(wd, 1.1));
+        // arch top
+        var i;
+        for (i = 0; i < 60; i++)
+        {
+            var a = Math.PI * (i / 59);
+            var ax = 48 - Math.cos(a) * 32;
+            var ay = 24 - Math.sin(a) * 18;
+            pr(g, Math.round(ax) - 3, Math.round(ay), 6, 5, wd);
+        }
+        // flowers all over it
+        var cols = ['#e86a94', '#f0d24a', '#8a6ad8', '#f2a0c8', '#f6f0e0'];
+        for (i = 0; i < 34; i++)
+        {
+            var t = i / 33;
+            var an = Math.PI * t;
+            var fx = 48 - Math.cos(an) * (32 + (i % 3 - 1) * 4);
+            var fy = 24 - Math.sin(an) * (18 + (i % 3 - 1) * 4);
+            if (i % 5 === 0)
+            {
+                fx = (i % 10 < 5) ? 19 : 76;
+                fy = 30 + (i * 7) % 44;
+            }
+            var c = cols[i % cols.length];
+            pe(g, fx, fy, 4, 4, c);
+            pe(g, fx - 1, fy - 1, 2, 2, tone(c, 1.4));
+            pr(g, fx, fy, 1, 1, '#f6e08a');
+        }
+        // leaves
+        for (i = 0; i < 12; i++)
+        {
+            var la = Math.PI * (i / 11);
+            pe(g, 48 - Math.cos(la) * 30, 24 - Math.sin(la) * 15, 4, 2, '#4f9a3a');
+        }
+    }, { outline: true });
+}
+
+function drawPetalRing(g, cx, cy, tick)
+{
+    var i;
+    for (i = 0; i < 22; i++)
+    {
+        var a = (i / 22) * Math.PI * 2 + tick * .012;
+        var r = 44 + Math.sin(tick * .03 + i) * 6;
+        var px = cx + Math.cos(a) * r;
+        var py = cy + Math.sin(a) * r * .45;
+        var c = ['#f2a0c8', '#f6d8e4', '#e86a94', '#f6f0e0'][i % 4];
+        pr(g, Math.round(px), Math.round(py), 2, 2, c);
+    }
+}
+
+function sprFairTarget()
+{
+    return bake('fairtarget', 48, 58, function (g)
+    {
+        var wd = '#7d5a34';
+        contactShadow(g, 24, 55, 14, 4);
+        pr(g, 21, 34, 6, 20, wd);
+        drawLimb(g, 24, 50, 14, 56, 4, 3, wd);
+        drawLimb(g, 24, 50, 34, 56, 4, 3, wd);
+        pe(g, 24, 20, 18, 18, '#f4ecd8');
+        pe(g, 24, 20, 14, 14, '#d84a3a');
+        pe(g, 24, 20, 10, 10, '#f4ecd8');
+        pe(g, 24, 20, 6, 6, '#3a6ad8');
+        pe(g, 24, 20, 2, 2, '#f0d24a');
+        pr(g, 30, 16, 8, 2, '#c8c8c8');
+        pr(g, 36, 14, 4, 4, '#d84a3a');
+    }, { outline: true });
+}
+
+function sprPumpkinLamp(tick)
+{
+    var f = (tick >> 4) % 2;
+    return bake('pumplamp:' + f, 34, 36, function (g)
+    {
+        var p = '#e08a28';
+        contactShadow(g, 17, 33, 12, 4);
+        pe(g, 17, 22, 14, 11, p);
+        pe(g, 12, 22, 5, 10, tone(p, 1.1));
+        pe(g, 23, 22, 4, 10, tone(p, -1.2));
+        pr(g, 15, 8, 4, 5, '#4f7a32');
+        pr(g, 15, 8, 2, 5, '#67a044');
+        // carved face, lit from inside
+        var gl = f ? '#ffe07a' : '#ffcf52';
+        pr(g, 11, 19, 4, 3, gl);
+        pr(g, 20, 19, 4, 3, gl);
+        pr(g, 12, 26, 11, 3, gl);
+        pr(g, 14, 25, 2, 1, gl);
+        pr(g, 19, 25, 2, 1, gl);
+        pr(g, 13, 29, 2, 1, p);
+        pr(g, 20, 29, 2, 1, p);
+    }, { outline: true });
+}
+
+function sprMazeWall(alt)
+{
+    return bake('mazewall:' + alt, TILE, 52, function (g)
+    {
+        var h = '#2f5a34';
+        contactShadow(g, 16, 49, 14, 4);
+        pr(g, 1, 14, 30, 34, h);
+        // clipped hedge: clumps, lit on the top-left
+        var i;
+        for (i = 0; i < 9; i++)
+        {
+            var cx = 5 + (i % 3) * 11 + (alt ? 2 : 0);
+            var cy = 16 + Math.floor(i / 3) * 11;
+            leafClump(g, cx, cy, 6, h, (i % 3) === 0);
+        }
+        pr(g, 1, 14, 30, 2, tone(h, 1.2));
+        pr(g, 1, 46, 30, 2, tone(h, -1.9));
+        // a few pale berries so it is not a green slab
+        for (i = 0; i < 4; i++)
+        {
+            pr(g, 4 + ((i * 9 + alt * 5) % 24), 20 + ((i * 11) % 24), 2, 2, '#c8506a');
+        }
+    }, { outline: true });
+}
+
+function sprIceHole(tick)
+{
+    var f = (tick >> 4) % 2;
+    // 44px tall so the rod can lean out of the tile
+    return bake('icehole:' + f, TILE, 44, function (g)
+    {
+        // chipped ice heaped around the rim first, so the hole cuts into it
+        var i;
+        for (i = 0; i < 12; i++)
+        {
+            var a = (i / 12) * Math.PI * 2;
+            pe(g, 16 + Math.cos(a) * 13, 26 + Math.sin(a) * 10, 4, 3, i % 2 ? '#f4f9ff' : '#dbe6f2');
+        }
+        pe(g, 16, 26, 12, 9, '#b9cbdb');
+        pe(g, 16, 26, 10, 7, '#17456f');
+        pe(g, 16, 27, 8, 5, '#0d2c4c');
+        // water catching the sky
+        pr(g, 10 + f, 24, 6, 1, 'rgba(190,225,255,.5)');
+        pr(g, 19 - f, 29, 4, 1, 'rgba(190,225,255,.35)');
+        // a rod left leaning in the hole, line dropping into the dark
+        drawLimb(g, 24, 30, 12, 6, 3, 2, '#6d4a2c');
+        pr(g, 13, 6, 1, 20, 'rgba(240,248,255,.65)');
+        pe(g, 13, 27, 2, 2, '#e04a4a');
+    }, { outline: true });
+}
+
+function sprStarTree(tick)
+{
+    var f = (tick >> 4) % 3;
+    return bake('startree:' + f, 96, 108, function (g)
+    {
+        var col = '#2f6a3f';
+        contactShadow(g, 48, 104, 26, 6);
+        // trunk
+        pr(g, 43, 90, 10, 14, '#5a3c22');
+        pr(g, 43, 90, 3, 14, '#6d4a2c');
+        // cone
+        var y, t, w, ax;
+        var top = 12, bottom = 92, span = bottom - top;
+        for (y = top; y <= bottom; y++)
+        {
+            t = (y - top) / span;
+            w = Math.max(1, Math.round(30 * Math.pow(t, .8) + (hash2(y, 2, 307) - .5) * 2.6));
+            ax = 48;
+            pr(g, ax - w, y, w * 2, 1, col);
+            pr(g, ax - w, y, Math.max(1, Math.round(w * .42)), 1, tone(col, .85));
+            pr(g, ax + Math.round(w * .5), y, Math.max(1, w - Math.round(w * .5)), 1, tone(col, -1.05));
+        }
+        var i;
+        for (i = 1; i <= 5; i++)
+        {
+            var ly = Math.round(top + span * (i / 5.4));
+            var lw = Math.max(2, Math.round(30 * Math.pow((ly - top) / span, .8)));
+            pr(g, 48 - lw, ly, lw * 2, 1, tone(col, -2));
+            pr(g, 48 - lw + 2, ly - 3, Math.round(lw * .85), 1, tone(col, 1.1));
+        }
+        // baubles and lights
+        var cols = ['#e04a4a', '#f0c24a', '#5aa8d8', '#f2f0e6', '#c86ad8'];
+        for (i = 0; i < 22; i++)
+        {
+            var by = 20 + Math.floor(hash2(i, 5, 911) * 68);
+            var bw = Math.round(30 * Math.pow((by - top) / span, .8));
+            var bx = 48 + Math.round((hash2(5, i, 913) - .5) * bw * 1.7);
+            var c = cols[i % cols.length];
+            pe(g, bx, by, 3, 3, c);
+            pe(g, bx - 1, by - 1, 1, 1, tone(c, 1.5));
+            if ((i + f) % 3 === 0)
+            {
+                pe(g, bx, by, 4, 4, 'rgba(255,240,190,.35)');
+            }
+        }
+        // star on top
+        var sc = f === 1 ? '#fff6c8' : '#f6e08a';
+        pr(g, 46, 4, 4, 12, sc);
+        pr(g, 42, 8, 12, 4, sc);
+        pr(g, 44, 6, 8, 8, sc);
+        pe(g, 48, 10, 7, 7, 'rgba(255,244,200,.35)');
+    }, { outline: true });
+}
+
+function sprGiftPile()
+{
+    return bake('giftpile', 40, 40, function (g)
+    {
+        contactShadow(g, 20, 37, 16, 4);
+        var boxes = [
+            [4, 20, 14, 14, '#d84a4a', '#f0d24a'],
+            [20, 24, 12, 11, '#4a7ad8', '#f2f0e6'],
+            [11, 8, 13, 13, '#5aa85a', '#e86a94']
+        ];
+        var i;
+        for (i = 0; i < boxes.length; i++)
+        {
+            var b = boxes[i];
+            pr(g, b[0], b[1], b[2], b[3], b[4]);
+            pr(g, b[0], b[1], b[2], 2, tone(b[4], 1.3));
+            pr(g, b[0], b[1], 2, b[3], tone(b[4], 1));
+            pr(g, b[0] + b[2] - 2, b[1], 2, b[3], tone(b[4], -1.3));
+            pr(g, b[0], b[1] + b[3] - 2, b[2], 2, tone(b[4], -1.8));
+            // ribbon
+            pr(g, b[0] + Math.floor(b[2] / 2) - 1, b[1], 3, b[3], b[5]);
+            pr(g, b[0], b[1] + Math.floor(b[3] / 2) - 1, b[2], 3, b[5]);
+            pe(g, b[0] + b[2] / 2, b[1] + b[3] / 2, 4, 3, tone(b[5], 1.2));
+        }
+    }, { outline: true });
+}
+
+function sprFestEgg(col)
+{
+    return bake('festegg:' + col, 16, 18, function (g)
+    {
+        contactShadow(g, 8, 16, 5, 2);
+        pe(g, 8, 9, 5, 7, col);
+        pe(g, 6, 6, 3, 3, tone(col, 1.5));
+        pr(g, 4, 9, 8, 1, tone(col, -1.3));
+        pr(g, 5, 12, 6, 1, tone(col, -1.3));
+    }, { outline: true });
+}
+
+function sprJelly(f)
+{
+    return bake('jelly:' + f, 20, 20, function (g)
+    {
+        var c = '#9ad8f4';
+        pe(g, 10, 8, 7 + f, 5, c);
+        pe(g, 9, 6, 4, 3, '#d8f2ff');
+        var i;
+        for (i = 0; i < 4; i++)
+        {
+            var tx = 6 + i * 3;
+            pr(g, tx, 11, 1, 5 + ((i + f) % 3), 'rgba(190,230,250,.75)');
+        }
+        pr(g, 6, 8, 8, 1, 'rgba(255,255,255,.5)');
+    });
 }
 
 
@@ -13122,6 +13576,16 @@ function rebuildActors()
 
 function scheduleSpot(d, hour)
 {
+    // during a festival everyone is at the venue, whatever their usual day says
+    var fst = festivalActive();
+    if (fst)
+    {
+        var fs = festivalSpot(d, fst);
+        if (fs)
+        {
+            return fs;
+        }
+    }
     if (!d.sch || d.sch.length === 0)
     {
         return null;
@@ -13878,6 +14342,609 @@ MONSTERS.pepper_rex = { name: '페퍼 렉스', hp: 300, dmg: 40, speed: .7, xp: 
     sprite: 'serpent', col: ['#5a7a3a', '#2a4a1a', '#8aaa6a'], drops: ['dinosaur_egg', 'bone_frag'] };
 MONSTERS.iridium_slime = { name: '이리듐 슬라임', hp: 220, dmg: 32, speed: .6, xp: 40, minFloor: 30, maxFloor: 999,
     sprite: 'slime', col: ['#c888e8', '#8848a8', '#e8b8f8'], drops: ['iridium_ore', 'slime'] };
+
+
+/* ===== festival.js ===== */
+
+// Starry Farm - festival scenes: decorations, gathered villagers, set pieces.
+// All comments ASCII only.
+//
+// Festivals used to be a text modal on an ordinary map: no decoration, and the
+// villagers stayed on their normal schedule, so the flower dance was Leah alone
+// in an empty forest. This file adds the scene.
+//
+// Everything here is derived from the clock. Nothing is written to the save and
+// nothing is baked into the ground cache, so a festival appears and disappears
+// on its own and cannot leave anything behind.
+
+// Venue rectangle per festival kind: where villagers gather and where the
+// decorations live. Kept well clear of doors and warps on purpose.
+var FEST_VENUE = {
+    egg_hunt: { map: 'town', x: 15, y: 19, w: 14, h: 8 },
+    dance: { map: 'forest', x: 26, y: 24, w: 16, h: 10 },
+    soup: { map: 'beach', x: 10, y: 8, w: 14, h: 8 },
+    jelly: { map: 'beach', x: 22, y: 13, w: 18, h: 5 },
+    fair: { map: 'town', x: 15, y: 19, w: 14, h: 8 },
+    maze: { map: 'town', x: 15, y: 19, w: 14, h: 8 },
+    icefish: { map: 'forest', x: 6, y: 26, w: 16, h: 12 },
+    gift: { map: 'town', x: 15, y: 19, w: 14, h: 8 }
+};
+
+// Decoration layout per festival. x/y are tile coordinates.
+// Nothing here blocks movement except kind 'maze_wall'.
+var FEST_DECOR = {
+    egg_hunt: [
+        { k: 'banner', x: 17, y: 19, t: '달걀 축제' },
+        { k: 'bunting', x: 15, y: 20, w: 14 },
+        { k: 'stall', x: 15, y: 24, c: '#d86a8a' },
+        { k: 'stall', x: 26, y: 24, c: '#6ab0d8' },
+        { k: 'table', x: 21, y: 25 }
+    ],
+    dance: [
+        { k: 'flowerarch', x: 32, y: 24 },
+        { k: 'bunting', x: 27, y: 23, w: 12 },
+        { k: 'petalring', x: 34, y: 29 },
+        { k: 'stall', x: 27, y: 31, c: '#e0a0c8' },
+        { k: 'table', x: 38, y: 31 }
+    ],
+    soup: [
+        { k: 'souppot', x: 16, y: 11 },
+        { k: 'bunting', x: 10, y: 8, w: 14 },
+        { k: 'table', x: 11, y: 13 },
+        { k: 'table', x: 20, y: 13 },
+        { k: 'stall', x: 10, y: 9, c: '#e8b060' }
+    ],
+    jelly: [
+        { k: 'lanternrow', x: 22, y: 14, w: 18 },
+        { k: 'table', x: 24, y: 16 },
+        { k: 'stall', x: 37, y: 15, c: '#7a8ad8' }
+    ],
+    fair: [
+        { k: 'banner', x: 17, y: 19, t: '별밤 축제' },
+        { k: 'bunting', x: 15, y: 20, w: 14 },
+        { k: 'stall', x: 15, y: 22, c: '#d8a040' },
+        { k: 'stall', x: 26, y: 22, c: '#60b070' },
+        { k: 'stall', x: 15, y: 26, c: '#b070c8' },
+        { k: 'target', x: 27, y: 26 },
+        { k: 'table', x: 21, y: 25 }
+    ],
+    maze: [
+        { k: 'bunting', x: 15, y: 20, w: 14 },
+        { k: 'pumpkinlamp', x: 16, y: 20 },
+        { k: 'pumpkinlamp', x: 27, y: 20 },
+        { k: 'pumpkinlamp', x: 16, y: 26 },
+        { k: 'pumpkinlamp', x: 27, y: 26 },
+        // a small maze in the lower half of the plaza, clear of every exit
+        { k: 'maze_wall', x: 19, y: 23, w: 8, h: 1 },
+        { k: 'maze_wall', x: 19, y: 24, w: 1, h: 3 },
+        { k: 'maze_wall', x: 26, y: 24, w: 1, h: 3 },
+        { k: 'maze_wall', x: 22, y: 25, w: 3, h: 1 },
+        { k: 'maze_wall', x: 21, y: 26, w: 1, h: 1 }
+    ],
+    icefish: [
+        { k: 'icehole', x: 9, y: 30 }, { k: 'icehole', x: 13, y: 33 },
+        { k: 'icehole', x: 17, y: 29 }, { k: 'icehole', x: 11, y: 36 },
+        { k: 'icehole', x: 15, y: 35 }, { k: 'icehole', x: 19, y: 33 },
+        { k: 'icehole', x: 8, y: 34 }, { k: 'icehole', x: 16, y: 31 },
+        { k: 'bunting', x: 6, y: 27, w: 14 },
+        { k: 'stall', x: 6, y: 25, c: '#8ac0e0' },
+        { k: 'campfire', x: 19, y: 26 }, { k: 'campfire', x: 8, y: 39 },
+        { k: 'table', x: 15, y: 25 }
+    ],
+    gift: [
+        { k: 'startree', x: 20, y: 24 },
+        { k: 'lanternrow', x: 15, y: 21, w: 14 },
+        { k: 'giftpile', x: 17, y: 26 },
+        { k: 'giftpile', x: 25, y: 26 },
+        { k: 'stall', x: 15, y: 22, c: '#c04848' },
+        { k: 'table', x: 25, y: 22 }
+    ]
+};
+
+// The eggs of the egg hunt are laid out here so the plaza actually looks like
+// something is hidden in it. Picking them up is still resolved by the modal.
+function festEggSpots()
+{
+    var out = [], i;
+    for (i = 0; i < 14; i++)
+    {
+        out.push({
+            x: 16 + Math.floor(hash2(i, 3, 811) * 12),
+            y: 20 + Math.floor(hash2(3, i, 823) * 7),
+            c: ['#f2d0dc', '#d8ecf4', '#f6ecc0', '#dcf0d4', '#e8d8f4'][i % 5]
+        });
+    }
+    return out;
+}
+
+function festivalDecor(f)
+{
+    return FEST_DECOR[f.kind] || [];
+}
+
+// Villagers gather at the venue instead of following their usual day.
+//
+// Hashing each villager to a slot looks fine until you count: with 29 people and
+// a handful of slots the birthday problem guarantees pile-ups (measured: 7 to 18
+// stacked). So build the list of free tiles once and hand them out by sequential
+// index instead. Collisions are then impossible by construction.
+var FEST_SLOTS = {};
+var FEST_ORDER = null;
+
+function festOrderIndex(id)
+{
+    if (!FEST_ORDER)
+    {
+        FEST_ORDER = {};
+        var arr = [], i;
+        for (i = 0; i < NPCS.length; i++)
+        {
+            arr.push(NPCS[i].id);
+        }
+        // stable, but not alphabetical, so the crowd is not sorted by name
+        arr.sort(function (a, b)
+        {
+            return hash2(a.length, a.charCodeAt(0), 601) - hash2(b.length, b.charCodeAt(0), 601)
+                || (a < b ? -1 : 1);
+        });
+        for (i = 0; i < arr.length; i++)
+        {
+            FEST_ORDER[arr[i]] = i;
+        }
+    }
+    return FEST_ORDER[id] === undefined ? 0 : FEST_ORDER[id];
+}
+
+function festSlots(f)
+{
+    if (FEST_SLOTS[f.kind])
+    {
+        return FEST_SLOTS[f.kind];
+    }
+    var v = FEST_VENUE[f.kind];
+    var m = MAP_CACHE[v.map] || loadMap(v.map);
+    var out = [], x, y;
+
+    function free(tx, ty)
+    {
+        if (tx < 1 || ty < 1 || tx >= m.w - 1 || ty >= m.h - 1)
+        {
+            return false;
+        }
+        if (isSolid(m, tx, ty)
+            && !(f.kind === 'icefish' && festIceTile(m, tx, ty))
+            && !festClearedSet(f)[tx + ',' + ty])
+        {
+            return false;
+        }
+        if (f.kind === 'maze' && tx >= 18 && tx <= 27 && ty >= 22 && ty <= 28)
+        {
+            return false;       // the maze is for the player to walk, not a stage
+        }
+        var d = FEST_DECOR[f.kind] || [], i;
+        for (i = 0; i < d.length; i++)
+        {
+            var o = d[i];
+            if (o.k === 'bunting' || o.k === 'lanternrow' || o.k === 'egg')
+            {
+                continue;       // strung overhead or on the ground
+            }
+            var ow = (o.k === 'maze_wall') ? (o.w || 1) : 2;
+            var oh = (o.k === 'maze_wall') ? (o.h || 1) : 2;
+            if (tx >= o.x - 1 && tx < o.x + ow && ty >= o.y - 1 && ty < o.y + oh)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    if (f.kind === 'dance')
+    {
+        // two rows facing each other across the arch, then an audience behind
+        for (x = 0; x < 8; x++)
+        {
+            if (free(v.x + 2 + x * 2, v.y + 2)) { out.push([v.x + 2 + x * 2, v.y + 2]); }
+            if (free(v.x + 2 + x * 2, v.y + 6)) { out.push([v.x + 2 + x * 2, v.y + 6]); }
+        }
+    }
+    // an exact grid of villagers on the ice looked like a parade, so the ice
+    // festival uses the same scattered fill as everything else.
+    // Fill the rest of the venue. Taking the tiles in scan order packed everyone
+    // into two columns against the edges, which read as a queue rather than a
+    // crowd, so shuffle deterministically and let them spread out. Villagers do
+    // not block movement, so a scattered crowd costs nothing.
+    //
+    // Grow the rectangle until there is a tile for every villager. Hand-tuned
+    // venue sizes silently produced a stack the moment anything else took a
+    // tile away -- the haunted maze ate most of the plaza and one villager
+    // ended up doubled up.
+    var rest = [], grow = 0;
+    while (grow < 12)
+    {
+        rest = [];
+        for (y = -grow; y < v.h + grow; y++)
+        {
+            for (x = -grow; x < v.w + grow; x++)
+            {
+                var tx = v.x + x, ty = v.y + y;
+                if (free(tx, ty))
+                {
+                    rest.push([tx, ty]);
+                }
+            }
+        }
+        if (out.length + rest.length >= NPCS.length + 6)
+        {
+            break;
+        }
+        grow += 2;
+    }
+    rest.sort(function (a, b)
+    {
+        return hash2(a[0], a[1], 977) - hash2(b[0], b[1], 977);
+    });
+    out = out.concat(rest);
+    // drop duplicates that the per-kind pass may have already added
+    var seen = {}, uniq = [], i;
+    for (i = 0; i < out.length; i++)
+    {
+        var k = out[i][0] + ',' + out[i][1];
+        if (seen[k])
+        {
+            continue;
+        }
+        seen[k] = 1;
+        uniq.push(out[i]);
+    }
+    FEST_SLOTS[f.kind] = { map: v.map, slots: uniq };
+    return FEST_SLOTS[f.kind];
+}
+
+function festivalSpot(d, f)
+{
+    var v = FEST_VENUE[f.kind];
+    if (!v)
+    {
+        return null;
+    }
+    var s = festSlots(f);
+    if (!s.slots.length)
+    {
+        return null;
+    }
+    var idx = festOrderIndex(d.id) % s.slots.length;
+    return { map: s.map, x: s.slots[idx][0], y: s.slots[idx][1] };
+}
+
+
+
+// The flower dance venue sits in dense forest and the luau one sits among beach
+// clutter, so the "festival" was a crowd standing between trees. For the day,
+// the village clears the ground: scatter objects inside the venue are neither
+// drawn nor solid. Terrain is untouched, and nothing is written to the save.
+var FEST_CLUTTER = { tree: 1, fruittree: 1, bush: 1, stump: 1, rock: 1, weed: 1,
+    grass: 1, branch: 1, forage: 1, cactus: 1, flowerdeco: 1, artifactspot: 1 };
+var FEST_CLEARED = {};
+
+function festClearedSet(f)
+{
+    if (FEST_CLEARED[f.kind])
+    {
+        return FEST_CLEARED[f.kind];
+    }
+    var v = FEST_VENUE[f.kind];
+    var m = MAP_CACHE[v.map] || loadMap(v.map);
+    var set = {}, i;
+    for (i = 0; i < m.objects.length; i++)
+    {
+        var o = m.objects[i];
+        if (!FEST_CLUTTER[o.kind])
+        {
+            continue;
+        }
+        if (o.x < v.x - 1 || o.y < v.y - 1 || o.x >= v.x + v.w + 1 || o.y >= v.y + v.h + 1)
+        {
+            continue;
+        }
+        // only clear what the object itself makes solid; never open up terrain
+        var w = (o.kind === 'bush') ? 2 : 1, a;
+        for (a = 0; a < w; a++)
+        {
+            if (!SOLID_TILES[m.tiles[o.y * m.w + o.x + a]])
+            {
+                set[(o.x + a) + ',' + o.y] = 1;
+            }
+        }
+    }
+    FEST_CLEARED[f.kind] = set;
+    return set;
+}
+
+// is this tile inside the venue and cleared for the day?
+function festClearAt(tx, ty)
+{
+    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    return !!festClearedSet(f)[tx + ',' + ty];
+}
+
+// should this object be hidden today?
+function festHides(o)
+{
+    if (!FEST_CLUTTER[o.kind])
+    {
+        return false;
+    }
+    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    var v = FEST_VENUE[f.kind];
+    return (o.x >= v.x - 1 && o.y >= v.y - 1 && o.x < v.x + v.w + 1 && o.y < v.y + v.h + 1);
+}
+
+// The ice festival is held on the forest lake, so during it the lake is frozen:
+// walkable, and drawn as ice. Without this the venue had zero standable tiles
+// and nobody could gather (measured: 1 villager, 0 slots).
+function festIceAt(tx, ty)
+{
+    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
+    if (!f || f.kind !== 'icefish' || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    return festIceTile(MAP, tx, ty);
+}
+
+function festIceTile(m, tx, ty)
+{
+    var v = FEST_VENUE.icefish;
+    if (tx < v.x - 3 || ty < v.y - 2 || tx >= v.x + v.w + 3 || ty >= v.y + v.h + 3)
+    {
+        return false;
+    }
+    var t = tileAt(m, tx, ty);
+    return (t === T_WATER || t === T_DEEP);
+}
+
+function drawFrozenLake(g, m, cam)
+{
+    var v = FEST_VENUE.icefish;
+    var x, y;
+    for (y = v.y - 2; y < v.y + v.h + 3; y++)
+    {
+        for (x = v.x - 3; x < v.x + v.w + 3; x++)
+        {
+            if (!festIceTile(m, x, y))
+            {
+                continue;
+            }
+            var sx = x * TILE - cam.x, sy = y * TILE - cam.y;
+            if (sx < -TILE || sy < -TILE || sx > VIEW.w || sy > VIEW.h)
+            {
+                continue;
+            }
+            g.drawImage(tileSnowIce(), sx, sy);
+            // a soft rim where the ice meets the bank
+            if (!festIceTile(m, x, y - 1))
+            {
+                pr(g, sx, sy, TILE, 2, 'rgba(255,255,255,.5)');
+            }
+        }
+    }
+}
+
+// Only the haunted maze blocks movement. Everything else is scenery on purpose:
+// a decoration that can wall the player away from a door is a bug waiting to
+// happen, and this game has already shipped one of those.
+function festWallAt(tx, ty)
+{
+    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    var d = FEST_DECOR[f.kind];
+    if (!d)
+    {
+        return false;
+    }
+    var i;
+    for (i = 0; i < d.length; i++)
+    {
+        var o = d[i];
+        if (o.k !== 'maze_wall')
+        {
+            continue;
+        }
+        if (tx >= o.x && tx < o.x + (o.w || 1) && ty >= o.y && ty < o.y + (o.h || 1))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Entries to fold into the render's y-sorted list, so decorations occlude and
+// are occluded correctly instead of floating over everyone.
+function festivalRenderList(f)
+{
+    var out = [], d = FEST_DECOR[f.kind] || [], i;
+    for (i = 0; i < d.length; i++)
+    {
+        var o = d[i];
+        var yy = o.y * TILE + TILE;
+        if (o.k === 'bunting' || o.k === 'lanternrow')
+        {
+            yy = o.y * TILE - 40;      // strung overhead, always behind people
+        }
+        out.push({ y: yy, fx: o });
+    }
+    if (f.kind === 'egg_hunt')
+    {
+        var eggs = festEggSpots();
+        for (i = 0; i < eggs.length; i++)
+        {
+            out.push({ y: eggs[i].y * TILE + TILE, fx: { k: 'egg', x: eggs[i].x, y: eggs[i].y, c: eggs[i].c } });
+        }
+    }
+    return out;
+}
+
+function drawFestProp(g, o, cam, tick)
+{
+    var x = o.x * TILE - cam.x, y = o.y * TILE - cam.y;
+    if (o.k === 'banner')
+    {
+        g.drawImage(sprBanner(o.t), x - 16, y - 12);
+    }
+    else if (o.k === 'bunting')
+    {
+        var i;
+        for (i = 0; i < (o.w || 8); i += 4)
+        {
+            g.drawImage(sprBunting(i & 1), x + i * TILE, y - 24 + Math.round(Math.sin((tick * .04) + i) * 2));
+        }
+    }
+    else if (o.k === 'lanternrow')
+    {
+        var j;
+        for (j = 0; j < (o.w || 8); j += 3)
+        {
+            g.drawImage(sprLanternString(((tick >> 4) + j) % 3), x + j * TILE,
+                y - 22 + Math.round(Math.sin((tick * .035) + j) * 2));
+        }
+    }
+    else if (o.k === 'stall')
+    {
+        g.drawImage(sprStall(o.c), x - 8, y + TILE - 62);
+    }
+    else if (o.k === 'table')
+    {
+        g.drawImage(sprFeastTable(), x - 8, y + TILE - 40);
+    }
+    else if (o.k === 'souppot')
+    {
+        g.drawImage(sprSoupPot(tick), x - 8, y + TILE - 58);
+    }
+    else if (o.k === 'flowerarch')
+    {
+        g.drawImage(sprFlowerArch(), x - 24, y + TILE - 78);
+    }
+    else if (o.k === 'petalring')
+    {
+        drawPetalRing(g, x + HALF, y + HALF, tick);
+    }
+    else if (o.k === 'target')
+    {
+        g.drawImage(sprFairTarget(), x - 8, y + TILE - 56);
+    }
+    else if (o.k === 'pumpkinlamp')
+    {
+        g.drawImage(sprPumpkinLamp(tick), x, y + TILE - 34);
+    }
+    else if (o.k === 'maze_wall')
+    {
+        var a, b;
+        for (b = 0; b < (o.h || 1); b++)
+        {
+            for (a = 0; a < (o.w || 1); a++)
+            {
+                g.drawImage(sprMazeWall((a + b) & 1), x + a * TILE, y + b * TILE - 20);
+            }
+        }
+    }
+    else if (o.k === 'icehole')
+    {
+        g.drawImage(sprIceHole(tick), x, y + TILE - 44);
+    }
+    else if (o.k === 'startree')
+    {
+        g.drawImage(sprStarTree(tick), x - 32, y + TILE - 104);
+    }
+    else if (o.k === 'giftpile')
+    {
+        g.drawImage(sprGiftPile(), x - 4, y + TILE - 38);
+    }
+    else if (o.k === 'campfire')
+    {
+        g.drawImage(sprCampfire(tick), x - 4, y + TILE - 34);
+    }
+    else if (o.k === 'egg')
+    {
+        g.drawImage(sprFestEgg(o.c), x + 8, y + 10 + Math.round(Math.sin(tick * .06 + o.x) * 1));
+    }
+}
+
+// Moonlight jellies rise out of the sea. Their position is shared by two
+// passes: the bodies are drawn on the water, and the glow is drawn after the
+// night wash. Drawing the glow with the bodies meant the darkening erased it
+// and the sea stayed empty on the one night it is supposed to light up.
+var JELLY_N = 46;
+
+function jellyAt(i, cam, tick)
+{
+    var tx = 7 + hash2(i, 1, 907) * 42;
+    var ty = 18.6 + hash2(1, i, 911) * 7.5;
+    return {
+        x: tx * TILE - cam.x,
+        y: ty * TILE - cam.y + Math.sin(tick * .03 + i * .7) * 5,
+        // jellies do not climb onto the pier
+        wet: WATER_TILES[tileAt(MAP, Math.floor(tx), Math.floor(ty))]
+    };
+}
+
+function drawJellies(g, cam, tick)
+{
+    var i;
+    for (i = 0; i < JELLY_N; i++)
+    {
+        var p = jellyAt(i, cam, tick);
+        if (!p.wet || p.x < -30 || p.y < -30 || p.x > VIEW.w + 30 || p.y > VIEW.h + 30)
+        {
+            continue;
+        }
+        g.drawImage(sprJelly((i + (tick >> 4)) % 3), Math.round(p.x) - 10, Math.round(p.y) - 10);
+    }
+}
+
+function festJellyGlow(g, cam, tick)
+{
+    var i;
+    for (i = 0; i < JELLY_N; i++)
+    {
+        var p = jellyAt(i, cam, tick);
+        var r = 40;
+        if (!p.wet || p.x < -r || p.y < -r || p.x > VIEW.w + r || p.y > VIEW.h + r)
+        {
+            continue;
+        }
+        var pulse = .6 + Math.sin(tick * .05 + i) * .3;
+        var gr = g.createRadialGradient(p.x, p.y, 2, p.x, p.y, r);
+        gr.addColorStop(0, 'rgba(180,238,255,' + (pulse * .55) + ')');
+        gr.addColorStop(.4, 'rgba(140,210,255,' + (pulse * .22) + ')');
+        gr.addColorStop(1, 'rgba(120,180,255,0)');
+        g.fillStyle = gr;
+        g.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+    }
+}
+
+function drawFestivalExtras(g, f, cam, tick)
+{
+    if (f.kind === 'jelly')
+    {
+        drawJellies(g, cam, tick);
+    }
+    else if (f.kind === 'icefish')
+    {
+        drawFrozenLake(g, MAP, cam);
+    }
+}
 
 
 /* ===== quest.js ===== */
@@ -17000,6 +18067,7 @@ function assertLoaded()
         ['TROPHIES', typeof TROPHIES !== 'undefined' && TROPHIES && TROPHIES.length > 0],
         ['ARTIFACTS', typeof ARTIFACTS !== 'undefined' && ARTIFACTS && ARTIFACTS.length > 0],
         ['desert map', typeof MAPS !== 'undefined' && MAPS && MAPS.desert],
+        ['FEST_DECOR', typeof FEST_DECOR !== 'undefined' && FEST_DECOR && FEST_DECOR.egg_hunt],
         // this one caught a silent failure: EDGE_PRI is declared in sprites.js but
         // keyed by constants from world.js, so building it too early produced a
         // table with a single "undefined" key and the ground fringe never ran.
@@ -17610,7 +18678,13 @@ function canStand(px, py)
     {
         var tx = Math.floor(pts[i][0] / TILE);
         var ty = Math.floor(pts[i][1] / TILE);
-        if (isSolid(MAP, tx, ty))
+        if (festWallAt(tx, ty))
+        {
+            return false;
+        }
+        // the forest lake is frozen for the ice festival, so water is ground;
+        // and the venue is cleared of trees and brush for the day
+        if (isSolid(MAP, tx, ty) && !festIceAt(tx, ty) && !festClearAt(tx, ty))
         {
             return false;
         }
@@ -19116,6 +20190,12 @@ function render()
     var gc = groundCanvas(MAP, season);
     g.drawImage(gc, cx, cy, VIEW.w, VIEW.h, 0, 0, VIEW.w, VIEW.h);
     drawWaterOverlay(g, MAP, CAM, WATER_FRAME, VIEW.w, VIEW.h);
+    var fnow0 = festivalActive();
+
+    if (fnow0 && MAP.id === fnow0.map)
+    {
+        drawFestivalExtras(g, fnow0, CAM, TICK);
+    }
 
     // tilled soil + crops
     drawSoil(g, season);
@@ -19132,6 +20212,10 @@ function render()
         {
             continue;
         }
+        if (festHides(o))
+        {
+            continue;
+        }
         list.push({ y: oy + (o.kind === 'building' || o.kind === 'animalbuilding' ? o.th * TILE : TILE), o: o });
     }
     for (i = 0; i < ACTORS.length; i++)
@@ -19141,6 +20225,17 @@ function render()
     for (i = 0; i < MINE.mobs.length; i++)
     {
         list.push({ y: MINE.mobs[i].y, m: MINE.mobs[i] });
+    }
+    // festival decorations join the same sort, so people walk in front of and
+    // behind them instead of the scenery floating over the crowd
+    var fnow = festivalActive();
+    if (fnow && MAP.id === fnow.map)
+    {
+        var fl = festivalRenderList(fnow);
+        for (i = 0; i < fl.length; i++)
+        {
+            list.push(fl[i]);
+        }
     }
     list.push({ y: S.py, p: true });
     list.sort(function (a, b) { return a.y - b.y; });
@@ -19159,6 +20254,10 @@ function render()
         else if (e.m)
         {
             drawOneMob(g, e.m);
+        }
+        else if (e.fx)
+        {
+            drawFestProp(g, e.fx, CAM, TICK);
         }
         else
         {
@@ -19477,6 +20576,12 @@ function loop(ts)
         updateActors(dt);
         updateMine(dt);
         updateFishing(dt);
+        // Ground can stop being ground: the ice festival freezes the forest lake
+        // and then thaws it at 14:00. Never leave her standing inside solid.
+        if (!canStand(S.px, S.py))
+        {
+            ensureStandable();
+        }
     }
     updateFx(dt);
     updateWeather(dt);
@@ -19706,7 +20811,10 @@ function applyAmbient(g)
     }
     if (a.dark > .005)
     {
-        g.fillStyle = 'rgba(16,20,52,' + a.dark + ')';
+        // ease off the night wash during the jelly dance so the sea can glow
+        var jf = festivalActive();
+        var dk = (jf && jf.kind === 'jelly' && MAP.id === jf.map) ? a.dark * .72 : a.dark;
+        g.fillStyle = 'rgba(16,20,52,' + dk + ')';
         g.fillRect(0, 0, W, H);
     }
     // vignette grows with darkness so night feels enclosed
@@ -19723,6 +20831,7 @@ function applyAmbient(g)
     if (a.dark > .12)
     {
         lampLights(g, a.dark);
+        festLights(g, a.dark);
         lightPool(g, a.dark);
     }
     if (S.weather === 'storm' && Math.random() < .005)
@@ -19783,6 +20892,57 @@ function lampLights(g, strength)
         gr.addColorStop(1, 'rgba(255,226,158,0)');
         g.fillStyle = gr;
         g.fillRect(px - 44, py + 2, 88, 88);
+    }
+}
+
+// Festival props that glow: pumpkin lanterns, the star tree, hung lanterns.
+// Same pass as the street lamps, so the two agree about how light behaves.
+function festLights(g, strength)
+{
+    var f = festivalActive();
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return;
+    }
+    if (f.kind === 'jelly')
+    {
+        festJellyGlow(g, CAM, TICK);
+    }
+    var d = FEST_DECOR[f.kind] || [];
+    var glow = { pumpkinlamp: [56, .9], startree: [92, 1.0], lanternrow: [70, .7],
+        souppot: [56, .8], campfire: [70, .9] };
+    var i;
+    for (i = 0; i < d.length; i++)
+    {
+        var o = d[i];
+        var gd = glow[o.k];
+        if (!gd)
+        {
+            continue;
+        }
+        var px = o.x * TILE + HALF - CAM.x;
+        var py = o.y * TILE + TILE - 22 - CAM.y;
+        if (o.k === 'startree')
+        {
+            py -= 46;
+        }
+        if (o.k === 'lanternrow')
+        {
+            px += ((o.w || 8) * TILE) / 2;
+            py -= 8;
+        }
+        var r = gd[0];
+        if (px < -r || py < -r || px > VIEW.w + r || py > VIEW.h + r)
+        {
+            continue;
+        }
+        var s2 = Math.min(1, strength * 1.9 * gd[1]);
+        var lg = g.createRadialGradient(px, py, 2, px, py, r);
+        lg.addColorStop(0, 'rgba(255,238,192,' + (s2 * .7) + ')');
+        lg.addColorStop(.3, 'rgba(255,220,150,' + (s2 * .32) + ')');
+        lg.addColorStop(1, 'rgba(255,214,132,0)');
+        g.fillStyle = lg;
+        g.fillRect(px - r, py - r, r * 2, r * 2);
     }
 }
 
