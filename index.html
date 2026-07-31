@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.7';
+var GAME_VER = '2.8';
 
 // ---------- core constants ----------
 
@@ -9459,7 +9459,7 @@ function newGame(name, farmName)
         bundles: {},
         animals: [], farmBuildings: [],
         pendingBuild: null,
-        shipBin: [], shipped: {},
+        festLog: [], shipBin: [], shipped: {},
         recipes: ['fried_egg', 'salad', 'bread'],
         crafts: ['chest', 'torch'],
         museum: {},
@@ -11095,6 +11095,7 @@ function migrateSave(d)
         }
     }
     def('look', { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12' });
+    def('festLog', []);
     def('maxEnergy', BASE_ENERGY);
     def('maxHealth', BASE_HEALTH);
     def('health', d.maxHealth || BASE_HEALTH);
@@ -15076,6 +15077,8 @@ function checkMazeGoal()
     S.flags[festMazeKey()] = true;
     give('pumpkin_seeds', 5);
     give('purple_mushroom', 1);
+    festLogAdd('maze', '유령의 밤', '미로를 통과해 사탕 바구니를 찾았다');
+    festCheckDone();
     modalMsg('유령의 밤', '미로 한가운데에 도착했어요!\n\n사탕 바구니에서 호박 씨앗과 보라 버섯을 받았습니다.');
 }
 
@@ -15373,7 +15376,9 @@ function festTakeEgg(i)
     if (got.length >= FEST_EGG_N)
     {
         give('strawberry_seeds', 5);
+        festLogAdd('egg_hunt', '달걀 축제', '달걀 ' + FEST_EGG_N + '개를 전부 찾아 1등!');
         modalMsg('달걀 축제', '달걀을 전부 찾았어요!\n\n1등! 딸기 씨앗 5개를 받았습니다.');
+        festCheckDone();
     }
     else
     {
@@ -15445,8 +15450,11 @@ function festIceTick(dt)
     festSet('iceDone', 1);
     festSet('iceCatch', n);
     S.gold += prize;
+    festLogAdd('icefish', '얼음 축제', n + '마리를 낚아 ' + (rank < 4 ? rank + '등' : '순위권 밖') +
+        ' (상금 ' + prize + 'G)');
     modalMsg('얼음 축제', n + '마리를 낚았어요!\n' + (rank < 4 ? rank + '등!' : '아쉽게 순위권 밖!') +
         '\n\n상금 ' + prize + 'G를 받았어요.');
+    festCheckDone();
 }
 
 // ---------- the fair target ----------
@@ -15505,17 +15513,21 @@ function festShotFire()
     {
         give('sunflower_seeds', 5);
         give('rainbow_shell', 1);
+        festSet('shotHit', '정중앙');
         modalMsg('과녁 맞추기', '한가운데 명중!\n\n해바라기 씨앗 5개와 무지개 조개를 받았어요.');
     }
     else if (off < .35)
     {
         give('sunflower_seeds', 3);
+        festSet('shotHit', '명중');
         modalMsg('과녁 맞추기', '명중!\n\n해바라기 씨앗 3개를 받았어요.');
     }
     else
     {
+        festSet('shotHit', '빗나감');
         modalMsg('과녁 맞추기', '아깝게 빗나갔어요!\n다음에 또 도전해봐요.');
     }
+    festCheckDone();
 }
 
 function drawFairShot(g)
@@ -15630,6 +15642,8 @@ function festJellyTick(dt)
     {
         festSet('jellySeen', 1);
         give('nautilus_shell', 1);
+        festLogAdd('jelly', '달빛해파리 춤', '바다가 해파리 빛으로 물드는 것을 보았다');
+        festCheckDone();
         modalMsg('달빛해파리 춤',
             '수천 마리의 해파리가 바다를 빛으로 물들였어요.\n\n마음이 따뜻해졌습니다.\n(앵무조개 껍데기를 주웠어요)');
     }
@@ -15720,9 +15734,12 @@ function festSoupChoose()
                 addFriend(k, good ? 60 : 20);
             }
         }
+        festLogAdd('soup', '루아우', ITEMS[sl.id].name + '을(를) 넣어 ' +
+            (good ? '총독이 감탄' : '무난한 맛'));
         modalMsg('루아우', good
             ? ITEMS[sl.id].name + '을(를) 넣었어요.\n\n총독이 감탄했어요! 마을 전체의 호감도가 크게 올랐습니다.'
             : ITEMS[sl.id].name + '을(를) 넣었어요.\n\n무난한 맛이었어요. 그래도 다들 즐거워했습니다.');
+        festCheckDone();
     });
 }
 
@@ -15826,8 +15843,12 @@ function festGrangeJudge()
     var prize = [0, 1000, 500, 250, 100][rank];
     S.gold += prize;
     festSet('grangeDone', 1);
+    festLogAdd('fair', '별밤 축제', '출품 점수 ' + score + '로 ' +
+        (rank < 4 ? rank + '등' : '순위권 밖') + ' (상금 ' + prize + 'G)' +
+        (festGet('shotHit') ? ', 과녁 ' + festGet('shotHit') : ''));
     modalMsg('별밤 축제', '출품 ' + chosen.length + '개\n점수 ' + score + '\n' +
         (rank < 4 ? rank + '등!' : '순위권 밖!') + '\n\n상금 ' + prize + 'G를 받았어요.');
+    festCheckDone();
 }
 
 // ---------- things you do by walking up to a person ----------
@@ -15854,8 +15875,10 @@ function festAskDance(actor)
             closeModal();
             festSet('danced', actor.id);
             addFriend(actor.id, 220);
+            festLogAdd('dance', '꽃춤', actor.def.name + '와(과) 함께 춤을 췄다');
             showDialogue(actor.def, '좋아, 같이 추자!\n\n(둘이서 꽃 아치 아래에서 춤을 췄어요)');
             toast(actor.def.name + '와(과) 춤을 췄어요! 호감도가 크게 올랐습니다.');
+            festCheckDone();
         } },
         { t: '나중에', cls: 'gray', cb: closeModal }
     ]);
@@ -15893,6 +15916,9 @@ function festGiveGift(actor)
             back = 'coffee';
         }
         give(back, 1);
+        festLogAdd('gift', '겨울 별 축제', '비밀 친구 ' + actor.def.name + '에게 ' +
+            ITEMS[sl.id].name + '을(를) 선물');
+        festCheckDone();
         modalMsg('겨울 별 축제',
             '비밀 친구는 ' + actor.def.name + '이었어요!\n\n' +
             ['고맙게 받았어요.', '마음에 들어 했어요!', '정말 좋아했어요!'][liked] +
@@ -16101,6 +16127,26 @@ var FEST_ROLE_TALK = {
         icefish: '낚싯대 손질은 해뒀어? 필요하면 말하고.',
         gift: '포장지는 내가 넉넉히 준비해 뒀어. 필요하면 가져가.'
     },
+    young: {
+        egg_hunt: '작년엔 세 개밖에 못 찾았어. 올해는 다를 거야!',
+        dance: '심장이 두근거려. 누가 나한테 신청해주려나?',
+        soup: '나는 요리를 잘 못해서... 그냥 먹기만 할래.',
+        jelly: '이런 거 보면 괜히 마음이 이상해지지 않아?',
+        fair: '나도 뭔가 출품해볼까 했는데 자신이 없어.',
+        maze: '같이 들어갈래? 혼자는 좀 무서워.',
+        icefish: '손 시려워도 이건 재밌어. 몇 마리 낚았어?',
+        gift: '내 비밀 친구가 누군지 진짜 모르겠어. 너는 알아?'
+    },
+    villager: {
+        egg_hunt: '아이들이 제일 신났네. 보고만 있어도 좋아.',
+        dance: '이런 날은 일 생각을 잠깐 잊게 돼.',
+        soup: '한 솥에 다 같이 끓여 먹는 게 이 축제의 전부야.',
+        jelly: '밤바다가 이렇게 조용한 날은 드물어.',
+        fair: '누가 1등 할지 내기라도 걸까?',
+        maze: '들어간 사람이 아직 안 나왔는데... 괜찮겠지?',
+        icefish: '얼음 위에 이렇게 다 모이는 게 일 년에 하루뿐이야.',
+        gift: '작은 거라도 받으면 하루 종일 기분이 좋아.'
+    },
     elder: {
         egg_hunt: '내가 어릴 적에도 이 광장에서 달걀을 찾았지.',
         dance: '예전엔 나도 저기서 춤을 췄단다. 다리가 성할 때 말이야.',
@@ -16263,6 +16309,103 @@ function drawFestOverlay(g)
     drawFairShot(g);
     drawIceClock(g);
     drawDanceHearts(g);
+}
+
+// ---------- the festival record ----------
+// Results used to vanish the moment the modal closed. Keeping them means the
+// player can look back at last year's ice fishing placing, which is most of
+// what makes an annual event feel annual.
+function festLogAdd(kind, name, text)
+{
+    if (!S.festLog)
+    {
+        S.festLog = [];
+    }
+    // one entry per festival per year: replay of the same day overwrites
+    var i;
+    for (i = 0; i < S.festLog.length; i++)
+    {
+        if (S.festLog[i].y === S.year && S.festLog[i].k === kind)
+        {
+            S.festLog[i].t = text;
+            return;
+        }
+    }
+    S.festLog.push({ y: S.year, k: kind, n: name, t: text });
+    // a very long game should not grow this without bound
+    while (S.festLog.length > 80)
+    {
+        S.festLog.shift();
+    }
+}
+
+function festLogFor(year)
+{
+    var out = [], i;
+    for (i = 0; i < (S.festLog || []).length; i++)
+    {
+        if (S.festLog[i].y === year)
+        {
+            out.push(S.festLog[i]);
+        }
+    }
+    return out;
+}
+
+// ---------- knowing when you are done ----------
+// Finishing an activity used to leave the player standing there with no idea
+// the festival was over for them. Offer the way home once, on completion.
+function festMainDone()
+{
+    var f = festivalActive();
+    if (!f)
+    {
+        return false;
+    }
+    if (f.kind === 'egg_hunt') { return (festGet('eggs') || []).length >= FEST_EGG_N; }
+    if (f.kind === 'dance') { return !!festGet('danced'); }
+    if (f.kind === 'soup') { return !!festGet('soup'); }
+    if (f.kind === 'jelly') { return !!festGet('jellySeen'); }
+    if (f.kind === 'fair') { return !!festGet('grangeDone') && !!festGet('shot'); }
+    if (f.kind === 'maze') { return !!S.flags[festMazeKey()]; }
+    if (f.kind === 'icefish') { return !!festGet('iceDone'); }
+    if (f.kind === 'gift') { return !!festGet('gifted'); }
+    return false;
+}
+
+// Called after every activity resolves. Waits a beat so it never lands on top
+// of the reward message.
+function festCheckDone()
+{
+    var f = festivalActive();
+    if (!f || festGet('wrapped') || !festMainDone())
+    {
+        return;
+    }
+    festSet('wrapped', 1);
+    // the reward message is usually still up, so wait for it rather than firing
+    // once into a closed door
+    var tries = 0;
+    var show = function ()
+    {
+        if (!festivalActive())
+        {
+            return;
+        }
+        if (UI.modal || UI.dialogue)
+        {
+            if (tries++ < 20)
+            {
+                setTimeout(show, 700);
+            }
+            return;
+        }
+        modalChoice('🎪 ' + f.name, '오늘 할 일을 다 했어요!\n\n더 둘러봐도 되고, 이만 돌아가도 돼요.', [
+            { t: '🎪 더 둘러보기', cls: 'green', cb: closeModal },
+            { t: '집으로 돌아가기', cls: 'gray', cb: endFestival }
+        ]);
+    };
+    setTimeout(show, 700);
 }
 
 
@@ -18368,7 +18511,7 @@ function openJournal()
     var m = modalShell('📜 수첩');
     var tabs = el('div', 'tabRow');
     var pages = {};
-    var names = [['goal', '목표'], ['trophy', '트로피'], ['skill', '스킬'], ['npc', '마을'], ['fish', '물고기'], ['relic', '유물'], ['ship', '출하'], ['help', '도움말']];
+    var names = [['goal', '목표'], ['trophy', '트로피'], ['skill', '스킬'], ['npc', '마을'], ['fish', '물고기'], ['relic', '유물'], ['fest', '축제'], ['ship', '출하'], ['help', '도움말']];
     var i;
     for (i = 0; i < names.length; i++)
     {
@@ -18403,6 +18546,8 @@ function openJournal()
         m.body.innerHTML = '';
         m.body.appendChild(pages[k]);
     }
+
+    buildFestPage(pages.fest);
 
     // skills
     var sk = pages.skill;
@@ -19390,6 +19535,88 @@ function questDayNotes()
         S.flags.requestExpired = null;
     }
     return notes;
+}
+
+// ---------- journal: the festival record ----------
+// An annual event only feels annual if you can look back at last year.
+function buildFestPage(page)
+{
+    page.appendChild(el('div', 'hint',
+        '축제에서 한 일이 해마다 기록돼요. 올해 남은 축제도 함께 보여줘요.'));
+
+    var log = S.festLog || [];
+    if (!log.length)
+    {
+        page.appendChild(el('div', 'hint', '\n아직 참가한 축제가 없어요.'));
+    }
+
+    // newest year first
+    var years = [], i;
+    for (i = 0; i < log.length; i++)
+    {
+        if (years.indexOf(log[i].y) < 0)
+        {
+            years.push(log[i].y);
+        }
+    }
+    years.sort(function (a, b) { return b - a; });
+
+    for (i = 0; i < years.length; i++)
+    {
+        (function (yr)
+        {
+            page.appendChild(el('div', 'sectionTitle', yr + '년차'));
+            var rows = festLogFor(yr), j;
+            for (j = 0; j < rows.length; j++)
+            {
+                var row = el('div', 'listRow');
+                var tx = el('div', 'tx');
+                tx.innerHTML = '<b>🎪 ' + rows[j].n + '</b>';
+                tx.appendChild(el('small', '', rows[j].t));
+                row.appendChild(tx);
+                page.appendChild(row);
+            }
+        })(years[i]);
+    }
+
+    // what is still to come this year
+    var left = [];
+    for (i = 0; i < FESTIVALS.length; i++)
+    {
+        var f = FESTIVALS[i];
+        var fi = ['spring', 'summer', 'fall', 'winter'].indexOf(f.season);
+        var done = false, k;
+        for (k = 0; k < log.length; k++)
+        {
+            if (log[k].y === S.year && log[k].k === f.kind)
+            {
+                done = true;
+            }
+        }
+        if (done)
+        {
+            continue;
+        }
+        if (fi > S.season || (fi === S.season && f.day >= S.day))
+        {
+            left.push(f);
+        }
+    }
+    if (left.length)
+    {
+        page.appendChild(el('div', 'sectionTitle', '올해 남은 축제'));
+        for (i = 0; i < left.length; i++)
+        {
+            var r2 = el('div', 'listRow');
+            var t2 = el('div', 'tx');
+            t2.innerHTML = '<b>' + left[i].name + '</b>';
+            t2.appendChild(el('small', '',
+                SEASON_KR[left[i].season] + ' ' + left[i].day + '일 · ' +
+                ({ town: '마을 광장', beach: '해변', forest: '숲' }[left[i].map])));
+            r2.appendChild(t2);
+            page.appendChild(r2);
+        }
+    }
 }
 
 
