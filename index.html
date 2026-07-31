@@ -1192,7 +1192,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.4';
+var GAME_VER = '2.5';
 
 // ---------- core constants ----------
 
@@ -6913,6 +6913,46 @@ function sprFestEgg(col)
         pe(g, 6, 6, 3, 3, tone(col, 1.5));
         pr(g, 4, 9, 8, 1, tone(col, -1.3));
         pr(g, 5, 12, 6, 1, tone(col, -1.3));
+    }, { outline: true });
+}
+
+function sprCandyBasket(tick)
+{
+    var f = (tick >> 4) % 2;
+    return bake('candybasket:' + f, TILE, 34, function (g)
+    {
+        var w = '#a8783c';
+        contactShadow(g, 16, 31, 12, 4);
+        // sweets heaped above the rim
+        var cols = ['#e04a6a', '#f0c24a', '#5aa8d8', '#8ad86a', '#c86ad8'];
+        var i;
+        for (i = 0; i < 8; i++)
+        {
+            var cx = 8 + (i % 4) * 5, cy = 12 + Math.floor(i / 4) * 4;
+            var c = cols[i % cols.length];
+            pe(g, cx, cy, 3, 3, c);
+            pe(g, cx - 1, cy - 1, 1, 1, tone(c, 1.5));
+        }
+        // basket
+        pr(g, 5, 17, 22, 12, w);
+        pr(g, 5, 17, 22, 2, tone(w, 1.3));
+        pr(g, 5, 27, 22, 2, tone(w, -1.8));
+        for (i = 0; i < 4; i++)
+        {
+            pr(g, 6 + i * 6, 19, 2, 9, tone(w, -.9));
+        }
+        pr(g, 3, 15, 26, 3, tone(w, .8));
+        pr(g, 3, 15, 26, 1, tone(w, 1.5));
+        // handle
+        for (i = 0; i < 18; i++)
+        {
+            var a = Math.PI * (i / 17);
+            pr(g, 16 - Math.round(Math.cos(a) * 10), 15 - Math.round(Math.sin(a) * 11), 2, 2, w);
+        }
+        if (f)
+        {
+            drawSparkle(g, 16, 8, tick);
+        }
     }, { outline: true });
 }
 
@@ -13488,6 +13528,19 @@ function talkTo(actor)
 {
     var d = NPC_BY_ID[actor.id];
     var n = S.npc[actor.id];
+    var fline = festivalLine(actor.id);
+    if (fline && n.met)
+    {
+        // the festival line replaces the day's chat but still counts as saying
+        // hello, so a festival is a good day to make friends
+        if (n.talkedDay !== S.day)
+        {
+            n.talkedDay = S.day;
+            addFriend(actor.id, 20);
+        }
+        showDialogue(d, fline);
+        return;
+    }
     if (!n.met)
     {
         n.met = true;
@@ -13672,8 +13725,17 @@ function updateActors(dt)
         }
         else
         {
-            a.moving = false;
-            a.frame = 0;
+            var fst = festivalActive();
+            if (fst && MAP.id === fst.map)
+            {
+                festivalIdle(a, fst, dt);
+            }
+            else
+            {
+                a.moving = false;
+                a.frame = 0;
+                a.sway = 0;
+            }
         }
     }
 }
@@ -13684,7 +13746,7 @@ function drawActors(g, cam)
     for (i = 0; i < ACTORS.length; i++)
     {
         var a = ACTORS[i];
-        var x = Math.round(a.x - PW / 2 - cam.x);
+        var x = Math.round(a.x + (a.sway || 0) - PW / 2 - cam.x);
         var y = Math.round(a.y - 50 - cam.y);
         if (x < -60 || y < -80 || x > cam.vw + 60 || y > cam.vh + 60)
         {
@@ -13892,20 +13954,13 @@ function runFestival(f)
     }
     else if (f.kind === 'maze')
     {
-        body += '어두운 미로에 도전합니다.';
-        btns.push({ t: '👻 미로 들어가기', cb: function ()
+        body += S.flags[festMazeKey()]
+            ? '미로는 벌써 통과했어요. 광장을 더 둘러봐도 좋아요.'
+            : '산울타리 미로가 광장 아래쪽에 있어요.\n한가운데에 사탕 바구니가 놓여 있대요.';
+        btns.push({ t: '👻 미로로 걸어가기', cls: 'green', cb: function ()
         {
-            var win = Math.random() < .45 + skillLvl('combat') * .03;
-            if (win)
-            {
-                give('pumpkin_seeds', 5);
-                give('purple_mushroom', 1);
-                modalMsg('유령의 밤', '미로를 통과했어요!\n\n호박 씨앗과 보라 버섯을 받았습니다.', endFestival);
-            }
-            else
-            {
-                modalMsg('유령의 밤', '길을 잃고 헤매다 밖으로 나왔어요.\n다음엔 성공할 수 있을 거예요!', endFestival);
-            }
+            // no dice roll: the hedges are real, so walk it
+            closeModal();
         } });
     }
     else if (f.kind === 'icefish')
@@ -14413,13 +14468,8 @@ var FEST_DECOR = {
         { k: 'pumpkinlamp', x: 16, y: 20 },
         { k: 'pumpkinlamp', x: 27, y: 20 },
         { k: 'pumpkinlamp', x: 16, y: 26 },
-        { k: 'pumpkinlamp', x: 27, y: 26 },
-        // a small maze in the lower half of the plaza, clear of every exit
-        { k: 'maze_wall', x: 19, y: 23, w: 8, h: 1 },
-        { k: 'maze_wall', x: 19, y: 24, w: 1, h: 3 },
-        { k: 'maze_wall', x: 26, y: 24, w: 1, h: 3 },
-        { k: 'maze_wall', x: 22, y: 25, w: 3, h: 1 },
-        { k: 'maze_wall', x: 21, y: 26, w: 1, h: 1 }
+        { k: 'pumpkinlamp', x: 27, y: 26 }
+        // the hedge maze itself is laid out as a grid, see MAZE_ROWS
     ],
     icefish: [
         { k: 'icehole', x: 9, y: 30 }, { k: 'icehole', x: 13, y: 33 },
@@ -14517,7 +14567,7 @@ function festSlots(f)
         {
             return false;
         }
-        if (f.kind === 'maze' && tx >= 18 && tx <= 27 && ty >= 22 && ty <= 28)
+        if (f.kind === 'maze' && mazeCovers(tx, ty))
         {
             return false;       // the maze is for the player to walk, not a stage
         }
@@ -14625,6 +14675,18 @@ function festivalSpot(d, f)
 // drawn nor solid. Terrain is untouched, and nothing is written to the save.
 var FEST_CLUTTER = { tree: 1, fruittree: 1, bush: 1, stump: 1, rock: 1, weed: 1,
     grass: 1, branch: 1, forage: 1, cactus: 1, flowerdeco: 1, artifactspot: 1 };
+
+// Street furniture the village would carry aside to make room. Only moved where
+// a festival genuinely needs the ground: the hedge maze had its entrance behind
+// the plaza signpost and its one through-route behind a bench, which made the
+// centre unreachable.
+var FEST_MOVABLE = { sign: 1, board: 1, bench: 1, planter: 1, crate: 1, barrel: 1 };
+
+function festMovesFurniture(f)
+{
+    return f.kind === 'maze';
+}
+
 var FEST_CLEARED = {};
 
 function festClearedSet(f)
@@ -14636,19 +14698,23 @@ function festClearedSet(f)
     var v = FEST_VENUE[f.kind];
     var m = MAP_CACHE[v.map] || loadMap(v.map);
     var set = {}, i;
+    var moves = festMovesFurniture(f);
     for (i = 0; i < m.objects.length; i++)
     {
         var o = m.objects[i];
-        if (!FEST_CLUTTER[o.kind])
+        var clutter = !!FEST_CLUTTER[o.kind];
+        var movable = moves && FEST_MOVABLE[o.kind] && mazeCovers(o.x, o.y);
+        if (!clutter && !movable)
         {
             continue;
         }
-        if (o.x < v.x - 1 || o.y < v.y - 1 || o.x >= v.x + v.w + 1 || o.y >= v.y + v.h + 1)
+        if (clutter && (o.x < v.x - 1 || o.y < v.y - 1
+            || o.x >= v.x + v.w + 1 || o.y >= v.y + v.h + 1))
         {
             continue;
         }
         // only clear what the object itself makes solid; never open up terrain
-        var w = (o.kind === 'bush') ? 2 : 1, a;
+        var w = (o.kind === 'bush' || o.kind === 'bench' || o.kind === 'bin') ? 2 : 1, a;
         for (a = 0; a < w; a++)
         {
             if (!SOLID_TILES[m.tiles[o.y * m.w + o.x + a]])
@@ -14675,12 +14741,16 @@ function festClearAt(tx, ty)
 // should this object be hidden today?
 function festHides(o)
 {
-    if (!FEST_CLUTTER[o.kind])
+    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
+    if (!f || !MAP || MAP.id !== f.map)
     {
         return false;
     }
-    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
-    if (!f || !MAP || MAP.id !== f.map)
+    if (festMovesFurniture(f) && FEST_MOVABLE[o.kind] && mazeCovers(o.x, o.y))
+    {
+        return true;
+    }
+    if (!FEST_CLUTTER[o.kind])
     {
         return false;
     }
@@ -14749,25 +14819,11 @@ function festWallAt(tx, ty)
     {
         return false;
     }
-    var d = FEST_DECOR[f.kind];
-    if (!d)
+    if (f.kind !== 'maze')
     {
         return false;
     }
-    var i;
-    for (i = 0; i < d.length; i++)
-    {
-        var o = d[i];
-        if (o.k !== 'maze_wall')
-        {
-            continue;
-        }
-        if (tx >= o.x && tx < o.x + (o.w || 1) && ty >= o.y && ty < o.y + (o.h || 1))
-        {
-            return true;
-        }
-    }
-    return false;
+    return mazeCell(tx, ty) === '#';
 }
 
 // Entries to fold into the render's y-sorted list, so decorations occlude and
@@ -14784,6 +14840,25 @@ function festivalRenderList(f)
             yy = o.y * TILE - 40;      // strung overhead, always behind people
         }
         out.push({ y: yy, fx: o });
+    }
+    if (f.kind === 'maze')
+    {
+        var r, c;
+        for (r = 0; r < MAZE_ROWS.length; r++)
+        {
+            for (c = 0; c < MAZE_ROWS[r].length; c++)
+            {
+                if (MAZE_ROWS[r].charAt(c) !== '#')
+                {
+                    continue;
+                }
+                var mx = MAZE_ORIGIN.x + c, my = MAZE_ORIGIN.y + r;
+                out.push({ y: my * TILE + TILE, fx: { k: 'hedge', x: mx, y: my } });
+            }
+        }
+        // the candy basket at the centre
+        var gl = festMazeGoal();
+        out.push({ y: gl.y * TILE + TILE, fx: { k: 'basket', x: gl.x, y: gl.y } });
     }
     if (f.kind === 'egg_hunt')
     {
@@ -14848,16 +14923,13 @@ function drawFestProp(g, o, cam, tick)
     {
         g.drawImage(sprPumpkinLamp(tick), x, y + TILE - 34);
     }
-    else if (o.k === 'maze_wall')
+    else if (o.k === 'hedge')
     {
-        var a, b;
-        for (b = 0; b < (o.h || 1); b++)
-        {
-            for (a = 0; a < (o.w || 1); a++)
-            {
-                g.drawImage(sprMazeWall((a + b) & 1), x + a * TILE, y + b * TILE - 20);
-            }
-        }
+        g.drawImage(sprMazeWall((o.x + o.y) & 1), x, y - 20);
+    }
+    else if (o.k === 'basket')
+    {
+        g.drawImage(sprCandyBasket(tick), x, y + TILE - 34);
     }
     else if (o.k === 'icehole')
     {
@@ -14944,6 +15016,217 @@ function drawFestivalExtras(g, f, cam, tick)
     {
         drawFrozenLake(g, MAP, cam);
     }
+}
+
+// ---------- what people do while they are there ----------
+// Standing perfectly still in a crowd of 29 reads as a shop display. These are
+// small idle motions, all derived from TICK and a per-villager phase so they do
+// not need any state of their own.
+
+// Where each festival's attention points. Villagers face it.
+var FEST_FOCUS = {
+    egg_hunt: [21, 21], dance: [34, 28], soup: [16, 11], jelly: [24, 22],
+    fair: [21, 22], maze: [22, 25], icefish: [13, 32], gift: [21, 24]
+};
+
+function festivalIdle(a, f, dt)
+{
+    a.moving = false;
+    var ph = festOrderIndex(a.id);
+    var t = TICK * .06 + ph * .7;
+
+    if (f.kind === 'dance')
+    {
+        // step side to side, partners mirroring each other across the arch
+        var row = (a.ty <= FEST_FOCUS.dance[1]) ? 0 : 1;
+        var s = Math.sin(t * 1.6 + row * Math.PI);
+        a.sway = s * 6;
+        a.dir = 2;
+        a.flip = s > 0;
+        a.frame = (Math.floor(TICK * .12 + ph) % 4);
+        return;
+    }
+
+    a.sway = 0;
+    var fc = FEST_FOCUS[f.kind];
+    if (fc)
+    {
+        var dx = fc[0] - a.tx, dy = fc[1] - a.ty;
+        if (Math.abs(dx) > Math.abs(dy))
+        {
+            a.dir = 2;
+            a.flip = dx > 0;
+        }
+        else
+        {
+            a.dir = dy < 0 ? 1 : 0;
+            a.flip = false;
+        }
+    }
+    // shift weight now and then rather than animating constantly
+    var beat = Math.sin(t * .45 + ph);
+    a.frame = beat > .82 ? 1 : (beat < -.82 ? 3 : 0);
+}
+
+function festMazeKey()
+{
+    return 'maze_done_' + S.year + '_' + S.day;
+}
+
+function checkMazeGoal()
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'maze' || !MAP || MAP.id !== f.map)
+    {
+        return;
+    }
+    if (S.flags[festMazeKey()])
+    {
+        return;
+    }
+    var g = festMazeGoal();
+    if (Math.floor(S.px / TILE) !== g.x || Math.floor(S.py / TILE) !== g.y)
+    {
+        return;
+    }
+    S.flags[festMazeKey()] = true;
+    give('pumpkin_seeds', 5);
+    give('purple_mushroom', 1);
+    modalMsg('유령의 밤', '미로 한가운데에 도착했어요!\n\n사탕 바구니에서 호박 씨앗과 보라 버섯을 받았습니다.');
+}
+
+// ---------- festival small talk ----------
+// Talking to anyone during a festival used to give their ordinary line of the
+// day, which made the whole village sound like nothing was happening.
+var FEST_TALK = {
+    egg_hunt: [
+        '달걀은 화분 뒤랑 좌판 밑에도 숨어 있대!',
+        '작년엔 내가 1등이었는데. 올해는 어떨까?',
+        '광장 전체에 숨겨 뒀다니까 잘 찾아봐.',
+        '달걀 색이 참 예쁘지? 밤새 물들였대.',
+        '선물은 마음이 중요한 거야. 비싼 거 아니어도 돼.',
+        '트리 꼭대기 별은 시장님이 매년 다신대.'
+    ],
+    dance: [
+        '꽃 아치 예쁘지? 아침부터 다 같이 엮었어.',
+        '누구한테 춤 신청할지 정했어?',
+        '이 꽃잎, 바람에 도는 게 참 좋다.',
+        '봄에 이거 하나 보려고 일 년을 기다려.',
+        '춤은 못 춰도 괜찮아. 그냥 서 있어도 즐거워.',
+        '작년엔 비가 왔었는데, 올해는 날이 참 좋다.'
+    ],
+    soup: [
+        '솥에 좋은 재료를 넣을수록 맛이 살아나.',
+        '총독님이 오늘 수프를 맛보신대. 긴장되네!',
+        '바다 냄새랑 수프 냄새가 섞이는 게 좋아.',
+        '뭘 넣을지 정했어? 아무거나 넣으면 안 돼!',
+        '수프에 넣을 재료는 하나뿐이야. 신중하게 골라.',
+        '해변에서 먹는 밥이 제일 맛있어. 왜 그럴까?'
+    ],
+    jelly: [
+        '조금만 기다려. 곧 바다가 빛나기 시작해.',
+        '해파리들이 저렇게 모이는 건 일 년에 하루뿐이야.',
+        '등불 아래에서 보면 더 예뻐.',
+        '어릴 때부터 매년 여기 서서 봤어.',
+        '배를 띄우고 보는 사람도 있대. 나는 여기가 좋아.',
+        '해파리 빛이 파도를 따라 흘러가는 걸 봐.'
+    ],
+    fair: [
+        '출품할 작물은 가져왔어? 품질이 중요해.',
+        '과녁 맞추기 해봤어? 생각보다 어려워.',
+        '올해 농사 어땠어? 심사위원이 까다롭대.',
+        '좌판마다 파는 게 달라. 한 바퀴 돌아봐.',
+        '상금이 꽤 커. 좋은 작물이 있으면 꼭 내봐.',
+        '저 좌판 아저씨, 매년 어디서 오는지 아무도 몰라.'
+    ],
+    maze: [
+        '미로 한가운데에 사탕 바구니가 있대.',
+        '나는 무서워서 못 들어가겠어. 네가 가볼래?',
+        '길이 헷갈려도 벽을 따라가면 나온대.',
+        '호박 등이 저렇게 웃고 있으니 더 무섭잖아!',
+        '울타리를 오늘 아침에 다 옮겨 심었어. 하루만 있는 미로야.',
+        '막다른 길이 하나 있어. 거기서 많이들 돌아 나오더라.'
+    ],
+    icefish: [
+        '얼음이 두꺼우니까 마음 놓고 걸어도 돼.',
+        '구멍 옆에 낚싯대 놔뒀어. 시간 안에 많이 낚아봐.',
+        '손이 얼겠다. 모닥불에서 좀 녹이고 가.',
+        '작년 우승자가 열 마리를 낚았어. 믿겨?',
+        '얼음 밑에서 물고기가 더 잘 문대. 신기하지?',
+        '구멍 근처는 미끄러우니까 조심해.'
+    ],
+    gift: [
+        '비밀 친구한테 줄 선물은 준비했어?',
+        '트리 장식, 마을 사람들이 하나씩 걸었어.',
+        '올해도 무사히 겨울을 났네. 고마워.',
+        '눈 오는 날 등불 켜진 광장이 제일 좋아.',
+        '선물은 마음이 중요한 거야. 비싼 거 아니어도 돼.',
+        '트리 꼭대기 별은 시장님이 매년 다신대.'
+    ]
+};
+
+function festivalLine(id)
+{
+    var f = festivalActive();
+    if (!f)
+    {
+        return null;
+    }
+    var pool = FEST_TALK[f.kind];
+    if (!pool || !pool.length)
+    {
+        return null;
+    }
+    // stable per person per festival, and stepped by a stride coprime with the
+    // pool so neighbours in the crowd do not repeat each other
+    var h = festOrderIndex(id) * 5 + S.year;
+    return pool[h % pool.length];
+}
+
+// ---------- the haunted maze ----------
+// Hand-listing wall rectangles produced a "maze" that was open along the bottom,
+// so the middle was two steps from the entrance. Lay it out as a grid instead --
+// it is much harder to get wrong, and easy to see at a glance.
+//   #  hedge      .  path      G  the candy basket
+// One entrance, one dead end, and a route that has to double back.
+var MAZE_ORIGIN = { x: 18, y: 22 };
+var MAZE_ROWS = [
+    '####.#####',
+    '#........#',
+    '#.######.#',
+    '#.#G...#.#',
+    '#.####.#.#',
+    '#....#...#',
+    '##########'
+];
+
+function mazeCell(tx, ty)
+{
+    var r = ty - MAZE_ORIGIN.y, c = tx - MAZE_ORIGIN.x;
+    if (r < 0 || c < 0 || r >= MAZE_ROWS.length || c >= MAZE_ROWS[0].length)
+    {
+        return null;
+    }
+    return MAZE_ROWS[r].charAt(c);
+}
+
+function festMazeGoal()
+{
+    var r, c;
+    for (r = 0; r < MAZE_ROWS.length; r++)
+    {
+        c = MAZE_ROWS[r].indexOf('G');
+        if (c >= 0)
+        {
+            return { x: MAZE_ORIGIN.x + c, y: MAZE_ORIGIN.y + r };
+        }
+    }
+    return { x: MAZE_ORIGIN.x + 1, y: MAZE_ORIGIN.y + 1 };
+}
+
+function mazeCovers(tx, ty)
+{
+    return mazeCell(tx, ty) !== null;
 }
 
 
@@ -20449,7 +20732,7 @@ function drawPlayer(g)
 
 function drawOneActor(g, a)
 {
-    var x = Math.round(a.x - PW / 2 - CAM.x);
+    var x = Math.round(a.x + (a.sway || 0) - PW / 2 - CAM.x);
     var y = Math.round(a.y - 50 - CAM.y);
     var spr = personSprite(a.id, a.def.look, a.dir, a.frame);
     if (a.dir === 2 && a.flip)
@@ -20582,6 +20865,7 @@ function loop(ts)
         {
             ensureStandable();
         }
+        checkMazeGoal();
     }
     updateFx(dt);
     updateWeather(dt);
