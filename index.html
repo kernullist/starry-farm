@@ -279,7 +279,8 @@ html, body
     background: var(--panel-2);
 }
 
-#questChip
+#questChip,
+#festChip
 {
     background: var(--panel);
     border: 3px solid var(--wood);
@@ -289,6 +290,13 @@ html, body
     font-size: 12px;
     max-width: 190px;
     line-height: 1.25;
+}
+
+#festChip
+{
+    margin-top: 6px;
+    border-color: #a8683c;
+    box-shadow: 0 0 0 3px #6d3f1e;
 }
 
 #weatherChip
@@ -1137,6 +1145,7 @@ textarea.fld
         <button class="iconBtn" id="btnMenu">☰</button>
         <button class="iconBtn" id="btnJournal">📜</button>
         <div id="questChip" style="display:none;"></div>
+        <div id="festChip" style="display:none;"></div>
     </div>
 
     <div id="weatherChip"></div>
@@ -1192,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.5';
+var GAME_VER = '2.6';
 
 // ---------- core constants ----------
 
@@ -10160,6 +10169,13 @@ function endDay(fainted, lostGold)
 {
     var summary = { sold: 0, items: [], levels: [], msgs: [] };
 
+    // festival progress is keyed by date; drop yesterday's so the save does not
+    // accumulate a flag per festival per year
+    if (typeof festSweepFlags === 'function')
+    {
+        festSweepFlags();
+    }
+
     // 1) shipping bin
     var i;
     for (i = 0; i < S.shipBin.length; i++)
@@ -11705,6 +11721,12 @@ var FISHING = {
 
 function canFishAt(m, tx, ty)
 {
+    // an ice-fishing hole is a hole in the ice: water, but the tile under it
+    // has been frozen over for the festival
+    if (typeof festIceHoleAt === 'function' && festIceHoleAt(tx, ty))
+    {
+        return true;
+    }
     return isWater(m, tx, ty);
 }
 
@@ -12008,6 +12030,10 @@ function finishFishing()
         return;
     }
     var f = r.fish;
+    if (typeof ICEFISH !== 'undefined' && ICEFISH.on)
+    {
+        ICEFISH.caught++;
+    }
     var q = 0;
     var perfect = FISHING.prog >= .99;
     var roll = Math.random() + skillLvl('fishing') * .02 + (perfect ? .2 : 0);
@@ -13528,6 +13554,10 @@ function talkTo(actor)
 {
     var d = NPC_BY_ID[actor.id];
     var n = S.npc[actor.id];
+    if (festivalTalk(actor))
+    {
+        return;
+    }
     var fline = festivalLine(actor.id);
     if (fline && n.met)
     {
@@ -13585,6 +13615,10 @@ function talkTo(actor)
 
 function rebuildActors()
 {
+    if (typeof festSyncPet === 'function')
+    {
+        festSyncPet();
+    }
     ACTORS = [];
     var hour = Math.floor(S.time / 60);
     var i;
@@ -13840,160 +13874,61 @@ function festivalActive()
 
 function runFestival(f)
 {
-    // festivals pause the clock and give a themed one-shot activity
+    // The menu is no longer where the festival happens -- the activities are on
+    // the map. This is the "what am I meant to do" card, plus the way home.
     UI.blockTime = true;
     var body = f.desc + '\n\n';
     var btns = [];
+    var ob = festObjective();
     if (f.kind === 'egg_hunt')
     {
-        body += '광장 곳곳에 달걀이 숨어 있어요.';
-        btns.push({ t: '🥚 달걀 찾기', cb: function ()
-        {
-            var n = 3 + Math.floor(Math.random() * 6);
-            give('egg', n);
-            var win = n >= 7;
-            if (win)
-            {
-                give('strawberry_seeds', 5);
-            }
-            modalMsg('달걀 축제', '달걀 ' + n + '개를 찾았어요!' + (win ? '\n\n1등! 딸기 씨앗 5개를 받았어요.' : ''), endFestival);
-        } });
+        body += '광장 곳곳에 달걀 ' + FEST_EGG_N + '개가 놓여 있어요.\n' +
+            '달걀 앞에 서서 사용 버튼을 누르면 주울 수 있어요.\n' +
+            '전부 찾으면 1등이에요!';
     }
     else if (f.kind === 'dance')
     {
-        body += '함께 춤출 사람을 찾아보세요.';
-        btns.push({ t: '💃 춤추기', cb: function ()
-        {
-            var partner = bestFriend(true);
-            if (partner && hearts(partner) >= 4)
-            {
-                addFriend(partner, 250);
-                modalMsg('꽃춤', NPC_BY_ID[partner].name + '와(과) 함께 춤을 췄어요!\n호감도가 크게 올랐습니다.', endFestival);
-            }
-            else
-            {
-                modalMsg('꽃춤', '아직 함께 춤출 만큼 친한 사람이 없네요.\n(4하트 이상 필요)', endFestival);
-            }
-        } });
+        body += '마음에 드는 사람에게 다가가 말을 걸어 보세요.\n' +
+            '4하트 이상이면 함께 춤을 출 수 있어요.';
     }
     else if (f.kind === 'soup')
     {
-        body += '수프에 재료를 넣으면 마을 사람 모두의 호감도가 오릅니다.';
-        btns.push({ t: '🥣 재료 넣기', cb: function ()
-        {
-            openIngredientPicker(function (slotIdx)
-            {
-                var sl = S.inv[slotIdx];
-                var val = sellPrice(sl.id, sl.q || 0);
-                removeItem(sl.id, 1, sl.q);
-                var good = val >= 160;
-                var k;
-                for (k in S.npc)
-                {
-                    if (S.npc.hasOwnProperty(k))
-                    {
-                        addFriend(k, good ? 60 : 20);
-                    }
-                }
-                modalMsg('루아우', good ? '총독이 감탄했어요! 마을 전체의 호감도가 올랐습니다.'
-                    : '무난한 맛이었어요. 그래도 다들 즐거워했습니다.', endFestival);
-            });
-        } });
+        body += '해변에 큰 수프 솥이 있어요.\n' +
+            '솥 앞에서 사용 버튼을 누르면 재료를 넣을 수 있어요.\n' +
+            '비싸고 좋은 재료일수록 총독이 기뻐해요.';
     }
     else if (f.kind === 'jelly')
     {
-        body += '바다가 달빛해파리로 물듭니다.';
-        btns.push({ t: '🌊 바라보기', cb: function ()
-        {
-            var k;
-            for (k in S.npc)
-            {
-                if (S.npc.hasOwnProperty(k))
-                {
-                    addFriend(k, 30);
-                }
-            }
-            modalMsg('달빛해파리 춤', '수천 마리의 해파리가 바다를 빛으로 물들였어요.\n\n마음이 따뜻해졌습니다.', endFestival);
-        } });
+        body += '물가에 서서 가만히 기다려 보세요.\n' +
+            '곧 바다가 해파리 빛으로 물들 거예요.';
     }
     else if (f.kind === 'fair')
     {
-        body += '농작물을 출품해 점수를 겨룹니다.';
-        btns.push({ t: '🏆 출품하기', cb: function ()
-        {
-            var score = 0, i;
-            var best = [];
-            for (i = 0; i < S.inv.length; i++)
-            {
-                var sl = S.inv[i];
-                if (sl && (ITEMS[sl.id].kind === 'crop' || ITEMS[sl.id].kind === 'artisan' || ITEMS[sl.id].kind === 'animal'))
-                {
-                    best.push(sellPrice(sl.id, sl.q || 0));
-                }
-            }
-            best.sort(function (a, b) { return b - a; });
-            for (i = 0; i < Math.min(9, best.length); i++)
-            {
-                score += best[i];
-            }
-            var rank = score > 2500 ? 1 : (score > 1200 ? 2 : (score > 400 ? 3 : 4));
-            var prize = [0, 1000, 500, 250, 50][rank];
-            S.gold += prize;
-            modalMsg('별밤 축제', '출품 점수: ' + score + '\n' + rank + '등!\n\n상금 ' + prize + 'G를 받았어요.', endFestival);
-        } });
-        btns.push({ t: '🎯 미니게임', cb: function ()
-        {
-            var win = Math.random() < .5;
-            if (win)
-            {
-                give('star_token', 1);
-                give('sunflower_seeds', 3);
-            }
-            modalMsg('과녁 맞추기', win ? '명중! 해바라기 씨앗을 받았어요.' : '아깝게 빗나갔어요!', endFestival);
-        } });
+        body += '좌판 앞에서 출품할 물건을 5개까지 고를 수 있어요.\n' +
+            '과녁 앞에서는 조준 게임을 할 수 있어요.';
     }
     else if (f.kind === 'maze')
     {
         body += S.flags[festMazeKey()]
             ? '미로는 벌써 통과했어요. 광장을 더 둘러봐도 좋아요.'
             : '산울타리 미로가 광장 아래쪽에 있어요.\n한가운데에 사탕 바구니가 놓여 있대요.';
-        btns.push({ t: '👻 미로로 걸어가기', cls: 'green', cb: function ()
-        {
-            // no dice roll: the hedges are real, so walk it
-            closeModal();
-        } });
     }
     else if (f.kind === 'icefish')
     {
-        body += '제한 시간 안에 물고기를 낚습니다.';
-        btns.push({ t: '🎣 대회 참가', cb: function ()
-        {
-            var caught = Math.max(0, Math.round(1 + skillLvl('fishing') * .6 + Math.random() * 3));
-            var rank = caught >= 6 ? 1 : (caught >= 4 ? 2 : 3);
-            var prize = [0, 2000, 500, 100][rank];
-            S.gold += prize;
-            addXp('fishing', 60);
-            modalMsg('얼음 축제', caught + '마리를 낚았어요!\n' + rank + '등!\n\n상금 ' + prize + 'G', endFestival);
-        } });
+        body += '호수가 얼었어요. 얼음 구멍 앞에서 사용 버튼을 누르면\n' +
+            '90초 낚시 대회가 시작돼요. 많이 낚을수록 좋은 등수!';
     }
     else if (f.kind === 'gift')
     {
-        body += '비밀 친구에게 선물을 줄 시간이에요.';
-        btns.push({ t: '🎁 선물 주기', cb: function ()
-        {
-            openIngredientPicker(function (slotIdx)
-            {
-                var sl = S.inv[slotIdx];
-                var who = NPCS[Math.floor(Math.random() * NPCS.length)];
-                removeItem(sl.id, 1, sl.q);
-                addFriend(who.id, 150);
-                var back = ['cookie', 'ice_cream', 'diamond', 'wine', 'pumpkin_pie'];
-                var got = back[Math.floor(Math.random() * back.length)];
-                give(got, 1);
-                modalMsg('겨울 별 축제', '비밀 친구는 ' + who.name + '이었어요!\n\n답례로 ' + ITEMS[got].name + '을(를) 받았습니다.', endFestival);
-            });
-        } });
+        var who = festSecretFriend();
+        body += '올해 당신의 비밀 친구는 ' + (who ? NPC_BY_ID[who].name : '?') + '이에요.\n' +
+            '찾아가서 말을 걸고 선물을 건네 보세요.';
     }
+    if (ob)
+    {
+        body += '\n\n진행: ' + ob.t + ' (' + ob.have + '/' + ob.need + ')';
+    }
+    btns.push({ t: '🎪 축제 즐기기', cls: 'green', cb: closeModal });
     btns.push({ t: '집으로 돌아가기', cls: 'gray', cb: endFestival });
     modalChoice('🎪 ' + f.name, body, btns);
 }
@@ -14495,14 +14430,22 @@ var FEST_DECOR = {
 // something is hidden in it. Picking them up is still resolved by the modal.
 function festEggSpots()
 {
-    var out = [], i;
-    for (i = 0; i < 14; i++)
+    // one egg per tile: two eggs on the same square look like one and can be
+    // picked twice from a standstill
+    var out = [], used = {}, i = 0, tries = 0;
+    while (out.length < FEST_EGG_N && tries < 400)
     {
-        out.push({
-            x: 16 + Math.floor(hash2(i, 3, 811) * 12),
-            y: 20 + Math.floor(hash2(3, i, 823) * 7),
-            c: ['#f2d0dc', '#d8ecf4', '#f6ecc0', '#dcf0d4', '#e8d8f4'][i % 5]
-        });
+        var x = 16 + Math.floor(hash2(tries, 3, 811) * 12);
+        var y = 20 + Math.floor(hash2(3, tries, 823) * 7);
+        tries++;
+        var k = x + ',' + y;
+        if (used[k])
+        {
+            continue;
+        }
+        used[k] = 1;
+        out.push({ x: x, y: y, c: ['#f2d0dc', '#d8ecf4', '#f6ecc0', '#dcf0d4', '#e8d8f4'][i % 5] });
+        i++;
     }
     return out;
 }
@@ -15172,6 +15115,11 @@ function festivalLine(id)
     {
         return null;
     }
+    var sp = festSpouseLine(id);
+    if (sp)
+    {
+        return sp;
+    }
     var pool = FEST_TALK[f.kind];
     if (!pool || !pool.length)
     {
@@ -15227,6 +15175,825 @@ function festMazeGoal()
 function mazeCovers(tx, ty)
 {
     return mazeCell(tx, ty) !== null;
+}
+
+// ---------- festival activities you actually do ----------
+//
+// Every festival used to be one button and a dice roll. These put the activity
+// on the map: walk to the thing, press the action button. The one exception is
+// the fair target, which needs a moment of timing, so it gets a thin gauge.
+//
+// Progress is keyed by date, so it expires on its own and needs no migration.
+
+function festKey(name)
+{
+    return 'fx_' + seasonId() + '_' + S.day + '_' + S.year + '_' + name;
+}
+
+function festGet(name)
+{
+    return S.flags[festKey(name)];
+}
+
+function festSet(name, v)
+{
+    S.flags[festKey(name)] = v;
+}
+
+// Old date-keyed festival flags pile up in the save forever. Sweep them at the
+// end of each day, keeping only today's.
+function festSweepFlags()
+{
+    var keep = 'fx_' + seasonId() + '_' + S.day + '_' + S.year + '_';
+    var k, drop = [];
+    for (k in S.flags)
+    {
+        if (S.flags.hasOwnProperty(k) && k.indexOf('fx_') === 0 && k.indexOf(keep) !== 0)
+        {
+            drop.push(k);
+        }
+    }
+    var i;
+    for (i = 0; i < drop.length; i++)
+    {
+        delete S.flags[drop[i]];
+    }
+    return drop.length;
+}
+
+// What the player should be doing right now, for the HUD chip.
+function festObjective()
+{
+    var f = festivalActive();
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return null;
+    }
+    if (f.kind === 'egg_hunt')
+    {
+        var got = (festGet('eggs') || []).length;
+        return { t: '숨은 달걀 찾기', have: got, need: FEST_EGG_N, hint: '달걀 앞에서 사용 버튼' };
+    }
+    if (f.kind === 'dance')
+    {
+        return { t: festGet('danced') ? '춤을 췄어요' : '함께 춤출 사람 찾기',
+            have: festGet('danced') ? 1 : 0, need: 1, hint: '4하트 이상인 사람에게 말 걸기' };
+    }
+    if (f.kind === 'soup')
+    {
+        return { t: festGet('soup') ? '재료를 넣었어요' : '수프에 재료 넣기',
+            have: festGet('soup') ? 1 : 0, need: 1, hint: '큰 솥 앞으로 가기' };
+    }
+    if (f.kind === 'jelly')
+    {
+        var w = festGet('watch') || 0;
+        return { t: festGet('jellySeen') ? '해파리를 봤어요' : '물가에서 기다리기',
+            have: Math.min(w, 100), need: 100, hint: '바닷가에 서서 가만히' };
+    }
+    if (f.kind === 'fair')
+    {
+        var g = (festGet('grange') || []).length;
+        var sh = festGet('shot');
+        return { t: g >= 5 ? (sh ? '축제를 즐기는 중' : '과녁 맞추기') : '출품할 작물 고르기',
+            have: g >= 5 ? (sh ? 1 : 0) : g, need: g >= 5 ? 1 : 5,
+            hint: g >= 5 ? '과녁 앞에서 사용 버튼' : '좌판 앞에서 사용 버튼' };
+    }
+    if (f.kind === 'maze')
+    {
+        return { t: S.flags[festMazeKey()] ? '미로를 통과했어요' : '미로 한가운데 찾기',
+            have: S.flags[festMazeKey()] ? 1 : 0, need: 1, hint: '산울타리 사이로 걸어 들어가기' };
+    }
+    if (f.kind === 'icefish')
+    {
+        if (festGet('iceDone'))
+        {
+            return { t: '대회가 끝났어요', have: 1, need: 1, hint: festGet('iceCatch') + '마리를 낚았어요' };
+        }
+        if (ICEFISH.on)
+        {
+            return { t: '얼음낚시 대회', have: ICEFISH.caught, need: 10,
+                hint: '남은 시간 ' + Math.ceil(ICEFISH.left) + '초' };
+        }
+        return { t: '얼음낚시 대회', have: 0, need: 10, hint: '얼음 구멍 앞에서 시작' };
+    }
+    if (f.kind === 'gift')
+    {
+        var who = festSecretFriend();
+        return { t: festGet('gifted') ? '선물을 전했어요' : '비밀 친구에게 선물하기',
+            have: festGet('gifted') ? 1 : 0, need: 1,
+            hint: festGet('gifted') ? '' : (who ? NPC_BY_ID[who].name + '을(를) 찾아가기' : '') };
+    }
+    return null;
+}
+
+// ---------- the egg hunt ----------
+var FEST_EGG_N = 14;
+
+function festEggTaken(i)
+{
+    var got = festGet('eggs') || [];
+    return got.indexOf(i) >= 0;
+}
+
+// nearest un-taken egg within reach of the player
+function festEggNear()
+{
+    var eggs = festEggSpots(), i, best = -1, bd = 1e9;
+    for (i = 0; i < eggs.length; i++)
+    {
+        if (festEggTaken(i))
+        {
+            continue;
+        }
+        var dx = (eggs[i].x * TILE + HALF) - S.px;
+        var dy = (eggs[i].y * TILE + HALF) - S.py;
+        var d = dx * dx + dy * dy;
+        if (d < 44 * 44 && d < bd)
+        {
+            bd = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+function festTakeEgg(i)
+{
+    var got = (festGet('eggs') || []).slice();
+    got.push(i);
+    festSet('eggs', got);
+    give('egg', 1);
+    sfx('pickup');
+    if (got.length >= FEST_EGG_N)
+    {
+        give('strawberry_seeds', 5);
+        modalMsg('달걀 축제', '달걀을 전부 찾았어요!\n\n1등! 딸기 씨앗 5개를 받았습니다.');
+    }
+    else
+    {
+        toast('달걀을 찾았어요! (' + got.length + '/' + FEST_EGG_N + ')');
+    }
+}
+
+// ---------- the ice fishing contest ----------
+// The clock is frozen during a festival, so the contest keeps its own timer.
+var ICEFISH = { on: false, left: 0, caught: 0 };
+
+function festIceHoleNear()
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'icefish')
+    {
+        return null;
+    }
+    var d = FEST_DECOR.icefish, i;
+    for (i = 0; i < d.length; i++)
+    {
+        if (d[i].k !== 'icehole')
+        {
+            continue;
+        }
+        var dx = (d[i].x * TILE + HALF) - S.px;
+        var dy = (d[i].y * TILE + HALF) - S.py;
+        if (dx * dx + dy * dy < 46 * 46)
+        {
+            return d[i];
+        }
+    }
+    return null;
+}
+
+function festIceStart()
+{
+    ICEFISH.on = true;
+    ICEFISH.left = 90;
+    ICEFISH.caught = 0;
+    toast('대회 시작! 90초 안에 최대한 많이 낚으세요.');
+}
+
+function festIceTick(dt)
+{
+    if (!ICEFISH.on)
+    {
+        return;
+    }
+    var f = festivalActive();
+    if (!f || f.kind !== 'icefish' || MAP.id !== f.map)
+    {
+        ICEFISH.on = false;
+        return;
+    }
+    ICEFISH.left -= dt;
+    if (ICEFISH.left > 0)
+    {
+        return;
+    }
+    ICEFISH.on = false;
+    if (FISHING.on)
+    {
+        endFishing();
+    }
+    var n = ICEFISH.caught;
+    var rank = n >= 8 ? 1 : (n >= 5 ? 2 : (n >= 2 ? 3 : 4));
+    var prize = [0, 800, 400, 150, 50][rank];
+    festSet('iceDone', 1);
+    festSet('iceCatch', n);
+    S.gold += prize;
+    modalMsg('얼음 축제', n + '마리를 낚았어요!\n' + (rank < 4 ? rank + '등!' : '아쉽게 순위권 밖!') +
+        '\n\n상금 ' + prize + 'G를 받았어요.');
+}
+
+// ---------- the fair target ----------
+// A sweeping crosshair the player stops with the action button.
+var FAIRSHOT = { on: false, p: 0, v: 1 };
+
+function festTargetNear()
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'fair')
+    {
+        return false;
+    }
+    var d = FEST_DECOR.fair, i;
+    for (i = 0; i < d.length; i++)
+    {
+        if (d[i].k !== 'target')
+        {
+            continue;
+        }
+        var dx = (d[i].x * TILE + HALF) - S.px;
+        var dy = (d[i].y * TILE + HALF) - S.py;
+        if (dx * dx + dy * dy < 52 * 52)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+function festShotTick(dt)
+{
+    if (!FAIRSHOT.on)
+    {
+        return;
+    }
+    FAIRSHOT.p += FAIRSHOT.v * dt * 1.35;
+    if (FAIRSHOT.p > 1)
+    {
+        FAIRSHOT.p = 1;
+        FAIRSHOT.v = -1;
+    }
+    if (FAIRSHOT.p < 0)
+    {
+        FAIRSHOT.p = 0;
+        FAIRSHOT.v = 1;
+    }
+}
+
+function festShotFire()
+{
+    FAIRSHOT.on = false;
+    festSet('shot', 1);
+    var off = Math.abs(FAIRSHOT.p - .5) * 2;    // 0 = dead centre
+    if (off < .12)
+    {
+        give('sunflower_seeds', 5);
+        give('rainbow_shell', 1);
+        modalMsg('과녁 맞추기', '한가운데 명중!\n\n해바라기 씨앗 5개와 무지개 조개를 받았어요.');
+    }
+    else if (off < .35)
+    {
+        give('sunflower_seeds', 3);
+        modalMsg('과녁 맞추기', '명중!\n\n해바라기 씨앗 3개를 받았어요.');
+    }
+    else
+    {
+        modalMsg('과녁 맞추기', '아깝게 빗나갔어요!\n다음에 또 도전해봐요.');
+    }
+}
+
+function drawFairShot(g)
+{
+    if (!FAIRSHOT.on)
+    {
+        return;
+    }
+    var w = Math.min(300, VIEW.w - 60), x = (VIEW.w - w) / 2, y = VIEW.h - 46;
+    g.fillStyle = 'rgba(24,18,10,.72)';
+    g.fillRect(x - 4, y - 4, w + 8, 24);
+    // zones: outer, near, bullseye
+    g.fillStyle = '#7a5a34';
+    g.fillRect(x, y, w, 16);
+    g.fillStyle = '#c8843a';
+    g.fillRect(x + w * .325, y, w * .35, 16);
+    g.fillStyle = '#d8483a';
+    g.fillRect(x + w * .44, y, w * .12, 16);
+    // the marker
+    var mx = x + FAIRSHOT.p * w;
+    g.fillStyle = '#fdf6e0';
+    g.fillRect(mx - 2, y - 4, 4, 24);
+    g.fillStyle = '#2a1e12';
+    g.fillRect(mx - 1, y - 2, 2, 20);
+}
+
+// ---------- the winter star secret friend ----------
+function festSecretFriend()
+{
+    if (!NPCS.length)
+    {
+        return null;
+    }
+    var i = (S.year * 7 + S.day) % NPCS.length;
+    return NPCS[i].id;
+}
+
+// ---------- reaching things ----------
+function festSoupPotNear()
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'soup')
+    {
+        return false;
+    }
+    var d = FEST_DECOR.soup, i;
+    for (i = 0; i < d.length; i++)
+    {
+        if (d[i].k !== 'souppot')
+        {
+            continue;
+        }
+        var dx = (d[i].x * TILE + HALF) - S.px;
+        var dy = (d[i].y * TILE + HALF) - S.py;
+        if (dx * dx + dy * dy < 56 * 56)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+function festGrangeNear()
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'fair')
+    {
+        return false;
+    }
+    var d = FEST_DECOR.fair, i;
+    for (i = 0; i < d.length; i++)
+    {
+        if (d[i].k !== 'stall')
+        {
+            continue;
+        }
+        var dx = (d[i].x * TILE + HALF) - S.px;
+        var dy = (d[i].y * TILE + HALF) - S.py;
+        if (dx * dx + dy * dy < 56 * 56)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ---------- watching the jellies ----------
+function festJellyTick(dt)
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'jelly' || MAP.id !== f.map || festGet('jellySeen'))
+    {
+        return;
+    }
+    // must be standing near the water and holding still
+    var ty = Math.floor(S.py / TILE), tx = Math.floor(S.px / TILE);
+    var nearSea = false, d;
+    for (d = 1; d <= 3; d++)
+    {
+        if (WATER_TILES[tileAt(MAP, tx, ty + d)])
+        {
+            nearSea = true;
+        }
+    }
+    if (!nearSea || PLAYER.moving)
+    {
+        return;
+    }
+    var w = (festGet('watch') || 0) + dt * 34;
+    festSet('watch', w);
+    if (w >= 100)
+    {
+        festSet('jellySeen', 1);
+        give('nautilus_shell', 1);
+        modalMsg('달빛해파리 춤',
+            '수천 마리의 해파리가 바다를 빛으로 물들였어요.\n\n마음이 따뜻해졌습니다.\n(앵무조개 껍데기를 주웠어요)');
+    }
+}
+
+// The one place every festival input lands. Returns true if it handled the
+// press, so the ordinary action button behaviour stays out of the way.
+function festivalUse()
+{
+    var f = festivalActive();
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    if (FAIRSHOT.on)
+    {
+        festShotFire();
+        return true;
+    }
+    if (f.kind === 'egg_hunt')
+    {
+        var e = festEggNear();
+        if (e >= 0)
+        {
+            festTakeEgg(e);
+            return true;
+        }
+    }
+    if (f.kind === 'soup' && !festGet('soup') && festSoupPotNear())
+    {
+        festSoupChoose();
+        return true;
+    }
+    if (f.kind === 'fair')
+    {
+        if (festGrangeNear())
+        {
+            festGrangeChoose();
+            return true;
+        }
+        if (!festGet('shot') && festTargetNear())
+        {
+            FAIRSHOT.on = true;
+            FAIRSHOT.p = 0;
+            FAIRSHOT.v = 1;
+            toast('사용 버튼으로 조준선을 멈추세요!');
+            return true;
+        }
+    }
+    if (f.kind === 'icefish' && !festGet('iceDone'))
+    {
+        var hole = festIceHoleNear();
+        if (hole)
+        {
+            if (!ICEFISH.on)
+            {
+                festIceStart();
+            }
+            startFishing(hole.x, hole.y);
+            return true;
+        }
+    }
+    return false;
+}
+
+// ---------- the two activities that still need a list ----------
+// Standing at the pot or the stall is the interaction; choosing what to put in
+// is a real decision, so it keeps a list. Everything else happens on the map.
+
+function festSoupChoose()
+{
+    openIngredientPicker(function (slotIdx)
+    {
+        var sl = S.inv[slotIdx];
+        if (!sl)
+        {
+            return;
+        }
+        var val = sellPrice(sl.id, sl.q || 0);
+        removeItem(sl.id, 1, sl.q);
+        festSet('soup', sl.id);
+        var good = val >= 160;
+        var k;
+        for (k in S.npc)
+        {
+            if (S.npc.hasOwnProperty(k))
+            {
+                addFriend(k, good ? 60 : 20);
+            }
+        }
+        modalMsg('루아우', good
+            ? ITEMS[sl.id].name + '을(를) 넣었어요.\n\n총독이 감탄했어요! 마을 전체의 호감도가 크게 올랐습니다.'
+            : ITEMS[sl.id].name + '을(를) 넣었어요.\n\n무난한 맛이었어요. 그래도 다들 즐거워했습니다.');
+    });
+}
+
+// Pick up to five things to show at the stall, then have them judged. The old
+// version auto-entered your nine most valuable items, which was not a choice.
+function festGrangeChoose()
+{
+    var chosen = (festGet('grange') || []).slice();
+    if (chosen.length >= 5)
+    {
+        festGrangeJudge();
+        return;
+    }
+    var m = modalShell('🏆 출품대 (' + chosen.length + '/5)');
+    m.body.appendChild(el('div', 'hint',
+        '작물, 물고기, 광물, 요리를 5개까지 올릴 수 있어요.\n비싸고 품질이 좋을수록 점수가 높아요.'));
+    var i, any = false;
+    for (i = 0; i < S.inv.length; i++)
+    {
+        var sl = S.inv[i];
+        if (!sl || isTool(sl.id))
+        {
+            continue;
+        }
+        var kind = ITEMS[sl.id].kind;
+        if (kind !== 'crop' && kind !== 'fish' && kind !== 'mineral' && kind !== 'food'
+            && kind !== 'forage' && kind !== 'animal')
+        {
+            continue;
+        }
+        any = true;
+        (function (slot, idx)
+        {
+            var row = el('div', 'listRow');
+            var ic = el('div', 'ico');
+            ic.appendChild(itemIcon(slot.id, 28));
+            row.appendChild(ic);
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + ITEMS[slot.id].name + (slot.q ? ' (' + QUALITY_KR[slot.q] + ')' : '') + '</b>';
+            tx.appendChild(el('small', '', '예상 점수 ' + festGrangeScoreOne(slot)));
+            row.appendChild(tx);
+            var b = el('button', 'btn green', '올리기');
+            b.onclick = function ()
+            {
+                chosen.push({ id: slot.id, q: slot.q || 0 });
+                removeItem(slot.id, 1, slot.q);
+                festSet('grange', chosen);
+                closeModal();
+                if (chosen.length >= 5)
+                {
+                    festGrangeJudge();
+                }
+                else
+                {
+                    toast('출품했어요 (' + chosen.length + '/5)');
+                }
+            };
+            row.appendChild(b);
+            m.body.appendChild(row);
+        })(sl, i);
+    }
+    if (!any)
+    {
+        m.body.appendChild(el('div', 'hint', '출품할 만한 물건이 가방에 없어요.'));
+    }
+    if (chosen.length > 0)
+    {
+        var done = el('button', 'btn', '이대로 심사받기 (' + chosen.length + '개)');
+        done.style.cssText = 'width:100%;margin-top:8px;';
+        done.onclick = function ()
+        {
+            closeModal();
+            festGrangeJudge();
+        };
+        m.body.appendChild(done);
+    }
+    openModal(m);
+}
+
+function festGrangeScoreOne(sl)
+{
+    return Math.round(sellPrice(sl.id, sl.q || 0) * (1 + (sl.q || 0) * .35));
+}
+
+function festGrangeJudge()
+{
+    var chosen = festGet('grange') || [];
+    if (!chosen.length)
+    {
+        modalMsg('별밤 축제', '아직 아무것도 출품하지 않았어요.');
+        return;
+    }
+    var score = 0, i;
+    for (i = 0; i < chosen.length; i++)
+    {
+        score += festGrangeScoreOne(chosen[i]);
+    }
+    // showing fewer than five leaves empty space on the table
+    score = Math.round(score * (chosen.length / 5));
+    var rank = score >= 2000 ? 1 : (score >= 1000 ? 2 : (score >= 400 ? 3 : 4));
+    var prize = [0, 1000, 500, 250, 100][rank];
+    S.gold += prize;
+    festSet('grangeDone', 1);
+    modalMsg('별밤 축제', '출품 ' + chosen.length + '개\n점수 ' + score + '\n' +
+        (rank < 4 ? rank + '등!' : '순위권 밖!') + '\n\n상금 ' + prize + 'G를 받았어요.');
+}
+
+// ---------- things you do by walking up to a person ----------
+// The dance used to pair you with whoever you liked most, automatically, and
+// the winter star gift went to a random villager. Both are about a person, so
+// both are now done by finding that person.
+
+function festAskDance(actor)
+{
+    if (festGet('danced'))
+    {
+        showDialogue(actor.def, '오늘 춤 정말 즐거웠어!');
+        return true;
+    }
+    var h = hearts(actor.id);
+    if (h < 4)
+    {
+        showDialogue(actor.def, '음... 아직은 좀 쑥스러운데.\n(4하트 이상이어야 해요)');
+        return true;
+    }
+    modalChoice('꽃춤', actor.def.name + '에게 춤을 신청할까요?', [
+        { t: '💃 신청하기', cls: 'green', cb: function ()
+        {
+            closeModal();
+            festSet('danced', actor.id);
+            addFriend(actor.id, 220);
+            showDialogue(actor.def, '좋아, 같이 추자!\n\n(둘이서 꽃 아치 아래에서 춤을 췄어요)');
+            toast(actor.def.name + '와(과) 춤을 췄어요! 호감도가 크게 올랐습니다.');
+        } },
+        { t: '나중에', cls: 'gray', cb: closeModal }
+    ]);
+    return true;
+}
+
+function festGiveGift(actor)
+{
+    if (festGet('gifted'))
+    {
+        showDialogue(actor.def, '선물 고마워! 잘 쓸게.');
+        return true;
+    }
+    var who = festSecretFriend();
+    if (actor.id !== who)
+    {
+        showDialogue(actor.def, '내 비밀 친구는 따로 있어. 너는 누구였더라?');
+        return true;
+    }
+    openIngredientPicker(function (slotIdx)
+    {
+        var sl = S.inv[slotIdx];
+        if (!sl)
+        {
+            return;
+        }
+        var liked = (actor.def.loves && actor.def.loves.indexOf(sl.id) >= 0) ? 2
+            : ((actor.def.likes && actor.def.likes.indexOf(sl.id) >= 0) ? 1 : 0);
+        removeItem(sl.id, 1, sl.q);
+        festSet('gifted', actor.id);
+        addFriend(actor.id, [120, 200, 320][liked]);
+        var back = ['pumpkin_soup', 'cheese', 'coffee'][Math.floor(Math.random() * 3)];
+        if (!ITEMS[back])
+        {
+            back = 'coffee';
+        }
+        give(back, 1);
+        modalMsg('겨울 별 축제',
+            '비밀 친구는 ' + actor.def.name + '이었어요!\n\n' +
+            ['고맙게 받았어요.', '마음에 들어 했어요!', '정말 좋아했어요!'][liked] +
+            '\n답례로 ' + ITEMS[back].name + '을(를) 받았습니다.');
+    });
+    return true;
+}
+
+// Called before the ordinary talk menu. Returns true when the festival handled
+// the villager.
+function festivalTalk(actor)
+{
+    var f = festivalActive();
+    if (!f || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    if (f.kind === 'dance')
+    {
+        return festAskDance(actor);
+    }
+    if (f.kind === 'gift')
+    {
+        return festGiveGift(actor);
+    }
+    return false;
+}
+
+// A fishing hole cut for the ice festival. The tile under it is lake water, so
+// canFishAt would allow it anyway -- this makes the intent explicit and keeps
+// working if the frozen-lake rule ever changes.
+function festIceHoleAt(tx, ty)
+{
+    var f = (typeof festivalActive === 'function') ? festivalActive() : null;
+    if (!f || f.kind !== 'icefish' || !MAP || MAP.id !== f.map)
+    {
+        return false;
+    }
+    var d = FEST_DECOR.icefish, i;
+    for (i = 0; i < d.length; i++)
+    {
+        if (d[i].k === 'icehole' && d[i].x === tx && d[i].y === ty)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ---------- family at the festival ----------
+// The whole village turns out, so the pet should not be left sitting in an
+// empty farmyard, and a spouse should say something warmer than the crowd line.
+
+// A festival-day copy of the pet, placed at the venue. Nothing is written to
+// the save: it is added to the live map object list only while the festival is
+// on, and loadMap rebuilds from S.mapObjs anyway.
+function festPetSpot(f)
+{
+    var v = FEST_VENUE[f.kind];
+    var s = festSlots(f);
+    // just behind the player's usual arrival side, out of the crowd's grid
+    var i;
+    for (i = s.slots.length - 1; i >= 0; i--)
+    {
+        var p = s.slots[i];
+        if (p[0] >= v.x && p[0] < v.x + v.w && p[1] >= v.y && p[1] < v.y + v.h)
+        {
+            return { x: p[0], y: p[1] };
+        }
+    }
+    return { x: v.x + 1, y: v.y + 1 };
+}
+
+function festAttachPet(m)
+{
+    var f = festivalActive();
+    if (!f || !S || !S.pet || m.id !== f.map)
+    {
+        return;
+    }
+    var i;
+    for (i = 0; i < m.objects.length; i++)
+    {
+        if (m.objects[i].festPet)
+        {
+            return;         // already there
+        }
+    }
+    var sp = festPetSpot(f);
+    m.objects.push({ kind: 'pet', pk: S.pet.kind, x: sp.x, y: sp.y,
+        hx: sp.x, hy: sp.y, festPet: true });
+}
+
+// and take it away again when the festival is over
+function festDetachPet(m)
+{
+    var out = [], i;
+    for (i = 0; i < m.objects.length; i++)
+    {
+        if (!m.objects[i].festPet)
+        {
+            out.push(m.objects[i]);
+        }
+    }
+    if (out.length !== m.objects.length)
+    {
+        m.objects = out;
+    }
+}
+
+function festSyncPet()
+{
+    if (!MAP || !S)
+    {
+        return;
+    }
+    var f = festivalActive();
+    if (f && MAP.id === f.map && S.pet)
+    {
+        festAttachPet(MAP);
+    }
+    else
+    {
+        festDetachPet(MAP);
+    }
+}
+
+// A married partner has their own thing to say at each festival.
+var FEST_SPOUSE = {
+    egg_hunt: '같이 달걀 찾자! 내가 저쪽을 볼게.',
+    dance: '오늘은 당연히 나랑 추는 거지?',
+    soup: '당신이 넣은 재료가 제일 맛있을 거야.',
+    jelly: '해마다 이걸 같이 보게 될 줄은 몰랐어.',
+    fair: '우리 농장 작물이 1등 하면 좋겠다!',
+    maze: '미로 무서우면 내 손 잡아도 돼.',
+    icefish: '춥지 않아? 모닥불 옆에 자리 잡아 뒀어.',
+    gift: '올해도 고마웠어. 내년에도 잘 부탁해.'
+};
+
+function festSpouseLine(id)
+{
+    var f = festivalActive();
+    if (!f || !S || S.spouse !== id)
+    {
+        return null;
+    }
+    return FEST_SPOUSE[f.kind] || null;
 }
 
 
@@ -16092,6 +16859,7 @@ function updateHud()
     drawClockDial();
     buildToolbar();
     updateGoalChip();
+    updateFestChip();
 
     var wc = $('weatherChip');
     if (MAP && MAP.id === 'mine')
@@ -18057,6 +18825,47 @@ function hideTitle()
 
 // ---------- goal chip ----------
 
+// The festival objective sits under the goal chip so there is always an answer
+// to "what am I supposed to be doing at this thing".
+function updateFestChip()
+{
+    var chip = $('festChip');
+    if (!chip)
+    {
+        return;
+    }
+    var ob = (typeof festObjective === 'function') ? festObjective() : null;
+    if (!ob)
+    {
+        chip.style.display = 'none';
+        return;
+    }
+    chip.style.display = 'block';
+    chip.innerHTML = '';
+    var t = el('div', '', '🎪 ' + ob.t);
+    t.style.cssText = 'font-size:12px;';
+    chip.appendChild(t);
+    if (ob.need > 1)
+    {
+        var s2 = el('div', '', ob.have + ' / ' + ob.need);
+        s2.style.cssText = 'font-size:10px;color:#7a5730;';
+        chip.appendChild(s2);
+        var bar = el('div');
+        bar.style.cssText = 'height:5px;background:#c8a878;border-radius:3px;overflow:hidden;margin-top:2px;border:1px solid #7a4a22;';
+        var fill = el('div');
+        var pct = Math.min(100, Math.round(ob.have / ob.need * 100));
+        fill.style.cssText = 'height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#e8c838' : '#6aa84f') + ';';
+        bar.appendChild(fill);
+        chip.appendChild(bar);
+    }
+    if (ob.hint)
+    {
+        var h = el('div', '', ob.hint);
+        h.style.cssText = 'font-size:10px;color:#7a5730;margin-top:2px;';
+        chip.appendChild(h);
+    }
+}
+
 function updateGoalChip()
 {
     var chip = $('questChip');
@@ -19746,11 +20555,21 @@ function doUseAction()
         }
         return;
     }
+    // festival activities happen on the map and take priority over tools
+    if (festivalUse())
+    {
+        return;
+    }
     var fest = festivalActive();
     if (fest && MAP.id === fest.map && !S.flags['fest_' + seasonId() + '_' + S.day + '_' + S.year])
     {
-        runFestival(fest);
-        return;
+        // nothing to interact with here, so offer the festival menu
+        var near = actorNear(S.px, S.py, 46);
+        if (!near)
+        {
+            runFestival(fest);
+            return;
+        }
     }
 
     // nearby villager first
@@ -20592,6 +21411,7 @@ function render()
     }
 
     applyAmbient(g);
+    drawFairShot(g);
 
     // interaction hint
     drawHint(g);
@@ -20866,6 +21686,9 @@ function loop(ts)
             ensureStandable();
         }
         checkMazeGoal();
+        festIceTick(dt);
+        festShotTick(dt);
+        festJellyTick(dt);
     }
     updateFx(dt);
     updateWeather(dt);
