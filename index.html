@@ -1192,7 +1192,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.1';
+var GAME_VER = '2.2';
 
 // ---------- core constants ----------
 
@@ -2755,6 +2755,36 @@ var HAIR_STYLES = ['bowl', 'long', 'spiky', 'bun', 'curly', 'short', 'pony', 'wa
 
 var PW = 32, PH = 54;
 
+// Step a tapering limb along a line. Drawing arms as axis-aligned blocks made
+// the side-on tool swing a green slab flying off the sprite; a real segment
+// from the shoulder to the grip stays on the body in every direction.
+function drawLimb(g, x0, y0, x1, y1, w0, w1, col)
+{
+    var dx = x1 - x0, dy = y1 - y0;
+    var n = Math.max(2, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
+    var i;
+    for (i = 0; i <= n; i++)
+    {
+        var t = i / n;
+        var w = Math.max(2, Math.round(w0 + (w1 - w0) * t));
+        var x = Math.round(x0 + dx * t - w / 2);
+        var y = Math.round(y0 + dy * t);
+        pr(g, x, y, w, 2, col);
+        pr(g, x, y, 1, 2, tone(col, 1));
+        pr(g, x + w - 1, y, 1, 2, tone(col, -1.3));
+    }
+}
+
+// A hand as wide as the sleeve reads as a mitten. Keep it narrower than the
+// cuff, round the top and bottom rows, and put the thumb on the inner side.
+function drawHand(g, hx, hy, skin, inner)
+{
+    pr(g, hx + 1, hy, 2, 1, tone(skin, .8));
+    pr(g, hx, hy + 1, 4, 2, skin);
+    pr(g, hx + 1, hy + 3, 2, 1, tone(skin, -1.4));
+    pr(g, hx + (inner < 0 ? 0 : 3), hy + 1, 1, 1, tone(skin, -.9));
+}
+
 function drawPerson(g, o, dir, frame)
 {
     var skin = o.skin || '#f0c8a0';
@@ -2840,37 +2870,49 @@ function drawPerson(g, o, dir, frame)
     var swing = step * 2;
     if (act >= 0)
     {
-        // both hands together, tracking an overhead arc
-        var ax = [0, 4, 2][act], ay = [-13, 4, -2][act];
+        // Both hands ride one grip point that swings through an arc. The grip
+        // stays inside the sprite in every facing; the arms follow it.
+        // act 0 = wound up, 1 = impact, 2 = recovering.
+        // The wind-up grip has to sit clear of the head silhouette (x 8..24),
+        // otherwise the raised arms are drawn behind the head and the pose
+        // looks like the farmer is doing nothing.
+        var gx, gy;
         if (dir === 2)
         {
-            ax = [4, 12, 8][act];
-            ay = [-13, 2, -5][act];
+            gx = [24, 26, 23][act];
+            gy = ty + [-8, 12, 3][act];
         }
-        if (dir === 1)
+        else if (dir === 1)
         {
-            ay = [-15, -6, -10][act];
+            gx = [7, 15, 11][act];
+            gy = ty + [-8, 12, 2][act];
         }
-        // upper arm from the shoulder to the hands
-        pr(g, 12 + ax * .5, ty + 3, 4, Math.max(3, 9 + ay * .35), shirt);
-        pr(g, 16 + ax * .5, ty + 3, 4, Math.max(3, 9 + ay * .35), shirt);
-        pr(g, 12 + ax * .5, ty + 3, 1, Math.max(3, 9 + ay * .35), tone(shirt, 1));
-        // forearms reaching to the grip
-        pr(g, 12 + ax, ty + 6 + ay * .5, 4, 6, shirt);
-        pr(g, 16 + ax, ty + 6 + ay * .5, 4, 6, shirt);
-        pr(g, 12 + ax, ty + 11 + ay * .5, 8, 2, tone(shirt, -1.8));
-        // hands
-        pr(g, 12 + ax, ty + 13 + ay * .5, 8, 4, skin);
-        pr(g, 12 + ax, ty + 16 + ay * .5, 8, 1, tone(skin, -1.5));
-        pr(g, 15 + ax, ty + 13 + ay * .5, 1, 4, tone(skin, -1.2));
+        else
+        {
+            gx = [25, 17, 21][act];
+            gy = ty + [-7, 16, 5][act];
+        }
+        var shy = ty + 4;
+        // elbow sits part way out along the arc so the limb bends
+        var elx = (12 - wide + gx) / 2 + (dir === 2 ? 2 : -2);
+        var erx = (20 + wide + gx) / 2 + (dir === 2 ? 2 : 2);
+        var ely = (shy + gy) / 2 + 2;
+        drawLimb(g, 12 - wide, shy, elx, ely, 5, 4, shirt);
+        drawLimb(g, elx, ely, gx - 2, gy, 4, 4, shirt);
+        drawLimb(g, 20 + wide, shy, erx, ely, 5, 4, shirt);
+        drawLimb(g, erx, ely, gx + 2, gy, 4, 4, shirt);
+        // cuffs, then the two hands meeting on the grip
+        pr(g, gx - 5, gy - 1, 4, 2, tone(shirt, -1.8));
+        pr(g, gx + 1, gy - 1, 4, 2, tone(shirt, -1.8));
+        drawHand(g, gx - 4, gy, skin, -1);
+        drawHand(g, gx, gy, skin, 1);
     }
     else if (dir === 2)
     {
         pr(g, 12, ty + 3 + swing, 5, 9, shirt);
         pr(g, 12, ty + 3 + swing, 1, 9, tone(shirt, 1));
         pr(g, 12, ty + 11 + swing, 5, 2, tone(shirt, -1.8));   // cuff
-        pr(g, 12, ty + 13 + swing, 5, 4, skin);
-        pr(g, 12, ty + 16 + swing, 5, 1, tone(skin, -1.5));
+        drawHand(g, 12, ty + 13 + swing, skin, 1);
     }
     else
     {
@@ -2881,10 +2923,8 @@ function drawPerson(g, o, dir, frame)
         pr(g, arx + 4, ty + 3 + swing, 1, 9, tone(shirt, -1.4));
         pr(g, alx, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
         pr(g, arx, ty + 11 + swing, 5, 2, tone(shirt, -1.8));
-        pr(g, alx, ty + 13 - swing, 5, 4, skin);
-        pr(g, arx, ty + 13 + swing, 5, 4, skin);
-        pr(g, alx, ty + 16 - swing, 5, 1, tone(skin, -1.5));
-        pr(g, arx, ty + 16 + swing, 5, 1, tone(skin, -1.5));
+        drawHand(g, alx + 1, ty + 13 - swing, skin, 1);
+        drawHand(g, arx, ty + 13 + swing, skin, -1);
     }
 
     // ---- head (y 6..21), 15 rows, tapering to a chin ----
@@ -6012,6 +6052,283 @@ function drawTitleArt(g, W, H, t)
     }
 }
 
+// ---------- town square props ----------
+// The plaza is 16x12 of bare flagstone. These give it edges and landmarks, and
+// the lamp is the only light source in the game besides the player.
+
+function sprLamp(lit)
+{
+    return bake('lamp:' + (lit ? 1 : 0), 24, 64, function (g)
+    {
+        var iron = '#3e4450';
+        contactShadow(g, 12, 61, 8, 3);
+        // base
+        pr(g, 8, 55, 8, 6, iron);
+        pr(g, 8, 55, 2, 6, tone(iron, 1.1));
+        pr(g, 14, 55, 2, 6, tone(iron, -1.3));
+        pr(g, 7, 60, 10, 2, tone(iron, -1.7));
+        // post with a slight taper
+        var y;
+        for (y = 18; y < 56; y++)
+        {
+            var w = y > 48 ? 6 : 4;
+            pr(g, 12 - w / 2, y, w, 1, iron);
+            pr(g, 12 - w / 2, y, 1, 1, tone(iron, 1.2));
+            pr(g, 12 + w / 2 - 1, y, 1, 1, tone(iron, -1.4));
+        }
+        // scroll bracket
+        pr(g, 8, 24, 3, 1, tone(iron, .8));
+        pr(g, 13, 24, 3, 1, tone(iron, .8));
+        // lantern housing
+        pr(g, 6, 8, 12, 12, tone(iron, -.6));
+        pr(g, 7, 9, 10, 10, lit ? '#ffdf9a' : '#5d6470');
+        pr(g, 8, 10, 8, 8, lit ? '#fff3cf' : '#6d7480');
+        if (lit)
+        {
+            pr(g, 9, 11, 6, 6, '#fffbe8');
+            pr(g, 10, 12, 4, 4, '#ffffff');
+        }
+        // glazing bars
+        pr(g, 11, 8, 2, 12, tone(iron, -.3));
+        pr(g, 6, 13, 12, 1, tone(iron, -.3));
+        // cap
+        pr(g, 4, 4, 16, 4, iron);
+        pr(g, 4, 4, 16, 1, tone(iron, 1.3));
+        pr(g, 6, 1, 12, 3, iron);
+        pr(g, 10, 0, 4, 1, tone(iron, 1.4));
+        pr(g, 4, 20, 16, 2, iron);
+        pr(g, 4, 21, 16, 1, tone(iron, -1.8));
+    }, { outline: true });
+}
+
+function sprBench()
+{
+    return bake('bench', 48, 36, function (g)
+    {
+        var wood = '#8a5f34', iron = '#454b58';
+        contactShadow(g, 24, 34, 20, 4);
+        // legs
+        pr(g, 5, 22, 4, 11, iron);
+        pr(g, 39, 22, 4, 11, iron);
+        pr(g, 3, 32, 8, 2, tone(iron, -1.5));
+        pr(g, 37, 32, 8, 2, tone(iron, -1.5));
+        // seat slats
+        var i;
+        for (i = 0; i < 3; i++)
+        {
+            var y = 20 + i * 4;
+            pr(g, 3, y, 42, 3, wood);
+            pr(g, 3, y, 42, 1, tone(wood, 1.1));
+            pr(g, 3, y + 2, 42, 1, tone(wood, -1.5));
+        }
+        // back rest
+        pr(g, 5, 6, 4, 15, iron);
+        pr(g, 39, 6, 4, 15, iron);
+        for (i = 0; i < 3; i++)
+        {
+            var by = 6 + i * 5;
+            pr(g, 4, by, 40, 4, wood);
+            pr(g, 4, by, 40, 1, tone(wood, 1.2));
+            pr(g, 4, by + 3, 40, 1, tone(wood, -1.6));
+        }
+        // grain
+        for (i = 0; i < 10; i++)
+        {
+            var gx = 5 + Math.floor(hash2(i, 3, 41) * 38);
+            var gy = 7 + Math.floor(hash2(3, i, 43) * 20);
+            pr(g, gx, gy, 3, 1, tone(wood, -.8));
+        }
+    }, { outline: true });
+}
+
+function sprPlanter(season)
+{
+    return bake('planter:' + season, 32, 40, function (g)
+    {
+        var clay = '#a8683c';
+        contactShadow(g, 16, 38, 12, 4);
+        // pot, wider at the rim
+        pr(g, 6, 20, 20, 4, tone(clay, .9));
+        pr(g, 7, 24, 18, 13, clay);
+        pr(g, 7, 24, 3, 13, tone(clay, 1));
+        pr(g, 21, 24, 4, 13, tone(clay, -1.2));
+        pr(g, 9, 36, 14, 2, tone(clay, -1.9));
+        pr(g, 6, 20, 20, 1, tone(clay, 1.5));
+        // soil
+        pr(g, 9, 22, 14, 3, '#4a3520');
+        var i;
+        if (season === 'winter')
+        {
+            // bare twigs under a cap of snow
+            for (i = 0; i < 4; i++)
+            {
+                var tx = 11 + i * 3;
+                pr(g, tx, 14 + (i % 2) * 3, 1, 8, '#6d5334');
+            }
+            pr(g, 8, 20, 16, 3, '#eef4fb');
+            pr(g, 9, 19, 13, 1, '#ffffff');
+            return;
+        }
+        var leaf = season === 'fall' ? '#b8742c' : '#4f9a3a';
+        leafClump(g, 12, 15, 7, leaf, true);
+        leafClump(g, 21, 16, 6, leaf, false);
+        leafClump(g, 16, 10, 7, leaf, true);
+        var bloom = season === 'fall' ? ['#e0a040', '#c85838'] : ['#e86a94', '#f0d24a', '#8a6ad8'];
+        for (i = 0; i < 5; i++)
+        {
+            var fx = 9 + Math.floor(hash2(i, 5, 51) * 15);
+            var fy = 6 + Math.floor(hash2(5, i, 53) * 13);
+            var c = bloom[i % bloom.length];
+            pe(g, fx, fy, 2, 2, c);
+            pr(g, fx, fy, 1, 1, tone(c, 1.4));
+        }
+    }, { outline: true });
+}
+
+function sprBarrel()
+{
+    return bake('barrel', 28, 34, function (g)
+    {
+        var wood = '#9a6b3a', band = '#5a5f6a';
+        contactShadow(g, 14, 32, 11, 4);
+        pe(g, 14, 30, 10, 3, tone(wood, -1.4));
+        pr(g, 5, 8, 18, 23, wood);
+        // staves
+        var i;
+        for (i = 0; i < 5; i++)
+        {
+            pr(g, 6 + i * 4, 8, 1, 23, tone(wood, -1.1));
+        }
+        pr(g, 5, 8, 3, 23, tone(wood, 1));
+        pr(g, 20, 8, 3, 23, tone(wood, -1.3));
+        // bulge: pull the middle out a pixel each side
+        pr(g, 4, 15, 1, 9, wood);
+        pr(g, 23, 15, 1, 9, tone(wood, -1.3));
+        // hoops
+        pr(g, 4, 12, 20, 2, band);
+        pr(g, 4, 24, 20, 2, band);
+        pr(g, 4, 12, 20, 1, tone(band, 1.2));
+        pr(g, 4, 25, 20, 1, tone(band, -1.6));
+        // lid
+        pe(g, 14, 8, 9, 3, tone(wood, .8));
+        pe(g, 14, 7, 7, 2, tone(wood, 1.4));
+    }, { outline: true });
+}
+
+function sprCrate()
+{
+    return bake('crate', 28, 28, function (g)
+    {
+        var wood = '#a87a44';
+        contactShadow(g, 14, 26, 11, 3);
+        pr(g, 3, 5, 22, 21, wood);
+        pr(g, 3, 5, 22, 2, tone(wood, 1.3));
+        pr(g, 3, 5, 2, 21, tone(wood, 1));
+        pr(g, 22, 5, 3, 21, tone(wood, -1.3));
+        pr(g, 3, 24, 22, 2, tone(wood, -1.8));
+        // planks and a diagonal brace
+        pr(g, 3, 12, 22, 1, tone(wood, -1.5));
+        pr(g, 3, 19, 22, 1, tone(wood, -1.5));
+        var i;
+        for (i = 0; i < 16; i++)
+        {
+            pr(g, 5 + i, 23 - i, 2, 1, tone(wood, -1.1));
+        }
+        for (i = 0; i < 8; i++)
+        {
+            var gx = 5 + Math.floor(hash2(i, 7, 61) * 18);
+            var gy = 7 + Math.floor(hash2(7, i, 63) * 16);
+            pr(g, gx, gy, 3, 1, tone(wood, -.7));
+        }
+    }, { outline: true });
+}
+
+// ---------- water trim ----------
+// The depth dither and the shoreline foam used to be drawn pixel by pixel every
+// frame: a 32x8 dither band is 256 fillRect calls, and a beach screen has ~50
+// boundary tiles, so the overlay was costing several milliseconds. Bake each
+// edge once and blit it. side: 0 top, 1 right, 2 bottom, 3 left.
+
+function waterDepthEdge(side, toDeep, variant)
+{
+    return bake('wde:' + side + ':' + (toDeep ? 1 : 0) + ':' + variant, TILE, TILE, function (g)
+    {
+        var a = toDeep ? '#2e77b2' : '#1c4a76';
+        var b = toDeep ? '#1c4a76' : '#2e77b2';
+        var d = toDeep ? (5 + variant) : (3 + variant);
+        var t = toDeep ? .5 : .42;
+        if (side === 0)
+        {
+            dither(g, 0, 0, TILE, d, a, b, t);
+        }
+        else if (side === 2)
+        {
+            dither(g, 0, TILE - d, TILE, d, a, b, t);
+        }
+        else if (side === 3)
+        {
+            dither(g, 0, 0, d, TILE, a, b, t);
+        }
+        else
+        {
+            dither(g, TILE - d, 0, d, TILE, a, b, t);
+        }
+    });
+}
+
+function waterFoam(side, frame, variant)
+{
+    // 3px of wet ground outside the waterline is included, so the sprite is
+    // drawn offset by 3 in each direction and is TILE+6 square.
+    var S6 = TILE + 6;
+    return bake('foam:' + side + ':' + frame + ':' + variant, S6, S6, function (g)
+    {
+        var c, up, d, o = 3;
+        for (c = 0; c < TILE; c += 2)
+        {
+            up = Math.floor(hash2(variant * 31 + c, frame, 105) * 3);
+            d = 2 + Math.floor(hash2(variant * 31 + c, frame, 101) * 3);
+            var tail = hash2(c, variant + frame, 103) > .58;
+            if (side === 0)
+            {
+                pr(g, o + c, o - up - 3, 2, 3, 'rgba(74,56,34,.20)');
+                pr(g, o + c, o - up, 2, up + d, 'rgba(240,250,255,.72)');
+                if (tail)
+                {
+                    pr(g, o + c, o + d, 2, 1, 'rgba(214,238,255,.42)');
+                }
+            }
+            else if (side === 2)
+            {
+                pr(g, o + c, o + TILE + up, 2, 3, 'rgba(74,56,34,.20)');
+                pr(g, o + c, o + TILE - d, 2, up + d, 'rgba(232,246,255,.62)');
+                if (tail)
+                {
+                    pr(g, o + c, o + TILE - d - 1, 2, 1, 'rgba(214,238,255,.36)');
+                }
+            }
+            else if (side === 3)
+            {
+                pr(g, o - up - 3, o + c, 3, 2, 'rgba(74,56,34,.20)');
+                pr(g, o - up, o + c, up + d, 2, 'rgba(240,250,255,.68)');
+                if (tail)
+                {
+                    pr(g, o + d, o + c, 1, 2, 'rgba(214,238,255,.4)');
+                }
+            }
+            else
+            {
+                pr(g, o + TILE + up, o + c, 3, 2, 'rgba(74,56,34,.20)');
+                pr(g, o + TILE - d, o + c, up + d, 2, 'rgba(240,250,255,.68)');
+                if (tail)
+                {
+                    pr(g, o + TILE - d - 1, o + c, 1, 2, 'rgba(214,238,255,.4)');
+                }
+            }
+        }
+    });
+}
+
 
 /* ===== world.js ===== */
 
@@ -6125,7 +6442,28 @@ var MAPS = {
             { kind: 'fountain', x: 20, y: 18 },
             { kind: 'sign', x: 22, y: 22, text: '펠리컨 마을 광장' },
             { kind: 'board', x: 18, y: 22 },
-            { kind: 'minecart', x: 30, y: 24 }
+            { kind: 'minecart', x: 30, y: 24 },
+            // the plaza was 16x12 of bare flagstone. lamps mark the corners,
+            // benches face the fountain, planters soften the edges.
+            { kind: 'lamp', x: 15, y: 17 },
+            { kind: 'lamp', x: 28, y: 17 },
+            { kind: 'lamp', x: 15, y: 26 },
+            { kind: 'lamp', x: 28, y: 26 },
+            { kind: 'bench', x: 17, y: 25 },
+            { kind: 'bench', x: 24, y: 25 },
+            { kind: 'bench', x: 24, y: 17 },
+            { kind: 'planter', x: 14, y: 20 },
+            { kind: 'planter', x: 14, y: 23 },
+            { kind: 'planter', x: 29, y: 20 },
+            { kind: 'planter', x: 29, y: 23 },
+            { kind: 'planter', x: 26, y: 16 },
+            { kind: 'crate', x: 45, y: 27 },
+            { kind: 'barrel', x: 45, y: 29 },
+            { kind: 'crate', x: 54, y: 33 },
+            { kind: 'barrel', x: 18, y: 9 },
+            { kind: 'lamp', x: 22, y: 9 },
+            { kind: 'lamp', x: 45, y: 21 },
+            { kind: 'bench', x: 45, y: 23 }
         ],
         wp: [
             { x: 0, y: 21, w: 1, h: 5, to: 'farm', tx: 48, ty: 20 },
@@ -6382,6 +6720,88 @@ function inAny(rects, x, y)
 
 // build the static structure of a map. dynamic objects (crops, dropped items,
 // placed machines) live in the save and are merged at draw time.
+// Deep water is authored as a rectangle inside a shallow rectangle, so the
+// depth change was a perfectly straight line no matter how it was shaded.
+// Dithering the pixels was not enough -- the straightness lives in the tile
+// grid. Scatter the tiles themselves, but in 2x2 lobes and then smooth, because
+// a per-tile coin flip leaves single dark squares that read as holes.
+function roughenWaterDepth(m)
+{
+    var x, y, i, pass;
+    var flips = [];
+    for (y = 0; y < m.h; y++)
+    {
+        for (x = 0; x < m.w; x++)
+        {
+            var t = m.tiles[y * m.w + x];
+            if (t !== T_DEEP && t !== T_WATER)
+            {
+                continue;
+            }
+            var want = (t === T_DEEP) ? T_WATER : T_DEEP;
+            var touches = false;
+            var dx = [0, 1, 0, -1], dy = [-1, 0, 1, 0], d;
+            for (d = 0; d < 4; d++)
+            {
+                if (tileAt(m, x + dx[d], y + dy[d]) === want)
+                {
+                    touches = true;
+                }
+            }
+            if (!touches)
+            {
+                continue;
+            }
+            // hash on a 2x2 block so flips arrive as lobes, not as speckle
+            var p = (t === T_DEEP) ? .52 : .3;
+            if (hash2(Math.floor(x / 2), Math.floor(y / 2), 149) < p)
+            {
+                flips.push(y * m.w + x, want);
+            }
+        }
+    }
+    for (i = 0; i < flips.length; i += 2)
+    {
+        m.tiles[flips[i]] = flips[i + 1];
+    }
+    // smooth: a water tile outnumbered by the other depth joins it, which
+    // removes single-tile islands and leaves a wandering edge
+    for (pass = 0; pass < 2; pass++)
+    {
+        var fix = [];
+        for (y = 0; y < m.h; y++)
+        {
+            for (x = 0; x < m.w; x++)
+            {
+                var t2 = m.tiles[y * m.w + x];
+                if (t2 !== T_DEEP && t2 !== T_WATER)
+                {
+                    continue;
+                }
+                var other = (t2 === T_DEEP) ? T_WATER : T_DEEP;
+                var n = 0, ddx = [0, 1, 0, -1], ddy = [-1, 0, 1, 0], k;
+                for (k = 0; k < 4; k++)
+                {
+                    if (tileAt(m, x + ddx[k], y + ddy[k]) === other)
+                    {
+                        n++;
+                    }
+                }
+                // only true islands: n >= 3 also swallowed every lobe and put
+                // the straight line back
+                if (n >= 4)
+                {
+                    fix.push(y * m.w + x, other);
+                }
+            }
+        }
+        for (i = 0; i < fix.length; i += 2)
+        {
+            m.tiles[fix[i]] = fix[i + 1];
+        }
+    }
+}
+
 function buildMap(id)
 {
     if (MAP_CACHE[id])
@@ -6415,6 +6835,7 @@ function buildMap(id)
             m.objects.push({ kind: 'building', bkind: b.kind, x: b.x, y: b.y, tw: b.tw, th: b.th, sign: b.sign || '' });
             m.warps.push({ x: dx, y: dy - 1, w: 1, h: 1, to: b.warp, interior: true, locked: b.locked || null });
         }
+        roughenWaterDepth(m);
         for (i = 0; i < (def.obj || []).length; i++)
         {
             var o = def.obj[i];
@@ -6502,6 +6923,22 @@ function buildInterior(id)
 }
 
 // seeded scatter so a fresh save always looks the same before the player edits it
+// A warp tile, or any tile touching one, is off limits to scatter.
+function nearWarp(m, x, y)
+{
+    var i;
+    for (i = 0; i < m.warps.length; i++)
+    {
+        var w = m.warps[i];
+        if (x >= w.x - 1 && x <= w.x + (w.w || 1) &&
+            y >= w.y - 1 && y <= w.y + (w.h || 1))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 function scatterMap(m, def)
 {
     var seedBase = 0;
@@ -6530,6 +6967,12 @@ function scatterMap(m, def)
                 continue;
             }
             if (grp.avoid && inAny(grp.avoid, rx, ry))
+            {
+                continue;
+            }
+            // never drop scatter on or beside a warp: a bush on the forest exit
+            // or a rock on the skull cavern entrance quietly blocks the way out
+            if (nearWarp(m, rx, ry))
             {
                 continue;
             }
@@ -6615,7 +7058,15 @@ function makeScatterObject(kind, x, y, seed)
 }
 
 // object footprints used for collision
+// lamps switch on at dusk. one predicate so the sprite and the light agree.
+function lampsLit()
+{
+    var h = S ? S.time / 60 : 12;
+    return (h >= 18.2 || h < 6.4);
+}
+
 var OBJ_SOLID = { tree: 1, rock: 1, building: 1, bin: 1, furn: 1, board: 1, sign: 1,
+    lamp: 1, bench: 1, planter: 1, barrel: 1, crate: 1,
     machine: 1, chest: 1, bush: 1, stump: 1, mine_entrance: 1, fountain: 1,
     animalbuilding: 1, fruittree: 1, cactus: 1, scarecrow: 0, crop: 0, weed: 0, grass: 0,
     branch: 0, forage: 0, flowerdeco: 0, drop: 0, sprinkler: 0, crabpot: 0,
@@ -6645,7 +7096,7 @@ function rebuildSolid(m)
         {
             w = 2;
         }
-        if (o.kind === 'bush')
+        if (o.kind === 'bush' || o.kind === 'bench')
         {
             w = 2;
         }
@@ -7039,50 +7490,69 @@ function groundMacro(g, m, season)
         return hash2(seed % 977, n, 157);
     };
 
+    // Snow is near-white, and soft-light barely moves pixels that are already
+    // at the top of the range -- the winter pass with soft-light was invisible.
+    // Winter therefore paints a translucent blue directly instead, which is
+    // also physically what a snow shadow is: sky light, not grey.
+    var wint = (season === 'winter');
+
     g.save();
-    // soft-light keeps the hue and only moves lightness. plain alpha fills
-    // would grey the colour out, which is what a flat overlay looked like.
-    g.globalCompositeOperation = 'soft-light';
-    var soft = g.globalCompositeOperation === 'soft-light';
-    if (!soft)
+    if (wint)
     {
         g.globalCompositeOperation = 'source-over';
     }
+    else
+    {
+        // soft-light keeps the hue and only moves lightness. plain alpha fills
+        // would grey the colour out, which is what a flat overlay looked like.
+        g.globalCompositeOperation = 'soft-light';
+        if (g.globalCompositeOperation !== 'soft-light')
+        {
+            g.globalCompositeOperation = 'source-over';
+        }
+    }
+    var soft = (g.globalCompositeOperation === 'soft-light');
+
+    var lit = wint ? '255,255,255' : '255,252,236';
+    var shd = wint ? '108,140,200' : '22,18,40';
 
     // broad swells first
-    var big = 4 + Math.round(W * H / 900000);
+    var big = (wint ? 7 : 4) + Math.round(W * H / 900000);
     var n, cx, cy, r, grd, up, a;
     for (n = 0; n < big; n++)
     {
         cx = rnd(n * 4 + 1) * W;
         cy = rnd(n * 4 + 2) * H;
         r = 190 + rnd(n * 4 + 3) * 300;
-        up = rnd(n * 4 + 4) > .5;
-        a = soft ? .30 : .05;
+        up = rnd(n * 4 + 4) > (wint ? .62 : .5);
+        a = wint ? (up ? .10 : .13) : (soft ? .30 : .05);
         grd = g.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grd.addColorStop(0, (up ? 'rgba(255,255,255,' : 'rgba(0,0,0,') + a + ')');
-        grd.addColorStop(1, (up ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)'));
+        grd.addColorStop(0, wint ? ('rgba(' + (up ? lit : shd) + ',' + a + ')')
+            : ((up ? 'rgba(255,255,255,' : 'rgba(0,0,0,') + a + ')'));
+        grd.addColorStop(1, wint ? ('rgba(' + (up ? lit : shd) + ',0)')
+            : (up ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)'));
         g.fillStyle = grd;
         g.fillRect(cx - r, cy - r, r * 2, r * 2);
     }
 
     // then medium patches at a scale that straddles several tiles
-    var mid = 14 + Math.round(W * H / 130000);
-    if (mid > 110)
+    var mid = (wint ? 30 : 14) + Math.round(W * H / 130000);
+    if (mid > 130)
     {
-        mid = 110;
+        mid = 130;
     }
     for (n = 0; n < mid; n++)
     {
         cx = rnd(n * 5 + 501) * W;
         cy = rnd(n * 5 + 502) * H;
         r = 46 + rnd(n * 5 + 503) * 96;
-        up = rnd(n * 5 + 504) > .48;
-        a = soft ? (.16 + rnd(n * 5 + 505) * .16) : .035;
+        up = rnd(n * 5 + 504) > (wint ? .66 : .48);
+        a = wint ? (up ? .09 : (.09 + rnd(n * 5 + 505) * .09))
+            : ((soft ? (.16 + rnd(n * 5 + 505) * .16) : .035));
         grd = g.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grd.addColorStop(0, (up ? 'rgba(255,252,236,' : 'rgba(22,18,40,') + a + ')');
-        grd.addColorStop(.62, (up ? 'rgba(255,252,236,' : 'rgba(22,18,40,') + (a * .45) + ')');
-        grd.addColorStop(1, up ? 'rgba(255,252,236,0)' : 'rgba(22,18,40,0)');
+        grd.addColorStop(0, 'rgba(' + (up ? lit : shd) + ',' + a + ')');
+        grd.addColorStop(.62, 'rgba(' + (up ? lit : shd) + ',' + (a * .45) + ')');
+        grd.addColorStop(1, 'rgba(' + (up ? lit : shd) + ',0)');
         g.fillStyle = grd;
         g.fillRect(cx - r, cy - r, r * 2, r * 2);
     }
@@ -7090,6 +7560,12 @@ function groundMacro(g, m, season)
 
     // long features that must cross tile borders. drawn here rather than inside
     // the tile, because anything wide baked into a 32px tile becomes a motif.
+    if (season === 'winter')
+    {
+        // wind-carved drift lines: a lit crest with a blue lee side
+        macroStreaks(g, m, T_GRASS, 'rgba(255,255,255,.85)', 'rgba(122,152,208,.40)', 3.4, seed + 61);
+        macroStreaks(g, m, T_DIRT, 'rgba(255,255,255,.7)', 'rgba(122,152,208,.32)', 2.2, seed + 67);
+    }
     macroStreaks(g, m, T_SAND, 'rgba(255,246,214,.5)', 'rgba(150,116,60,.24)', 1.6, seed + 11);
     macroStreaks(g, m, T_DIRT, 'rgba(255,238,206,.26)', 'rgba(58,36,18,.22)', 1.1, seed + 29);
     macroStreaks(g, m, T_CAVE, 'rgba(220,226,255,.16)', 'rgba(10,8,20,.30)', .9, seed + 47);
@@ -7201,6 +7677,7 @@ function drawWaterOverlay(g, m, cam, frame, vw, vh)
     var x1 = Math.min(m.w, Math.ceil((cam.x + vw) / TILE) + 1);
     var y1 = Math.min(m.h, Math.ceil((cam.y + vh) / TILE) + 1);
     var x, y;
+    var NX = [0, 1, 0, -1], NY = [-1, 0, 1, 0];
     for (y = y0; y < y1; y++)
     {
         for (x = x0; x < x1; x++)
@@ -7229,28 +7706,23 @@ function drawWaterOverlay(g, m, cam, frame, vw, vh)
                 g.fillRect(sx, sy, TILE, TILE);
             }
 
-            // shallow-to-deep must not be a straight line either
-            if (t === T_DEEP && tileAt(m, x, y - 1) === T_WATER)
+            // Depth transition and foam are baked per edge; blitting four
+            // sprites beats redrawing a few hundred one-pixel rects a frame.
+            var ev = Math.floor(hash2(x, y, 97) * 4);
+            var toDeep = (t === T_DEEP);
+            var want = toDeep ? T_WATER : T_DEEP;
+            var q, nt2;
+            for (q = 0; q < 4; q++)
             {
-                dither(g, sx, sy, TILE, 6, '#2e77b2', '#1c4a76', .5);
-            }
-
-            // ragged, lapping foam where water meets land
-            if (!WATER_TILES[tileAt(m, x, y - 1)])
-            {
-                foamEdge(g, sx, sy, 0, x, y, frame);
-            }
-            if (!WATER_TILES[tileAt(m, x, y + 1)])
-            {
-                foamEdge(g, sx, sy, 2, x, y, frame);
-            }
-            if (!WATER_TILES[tileAt(m, x - 1, y)])
-            {
-                foamEdge(g, sx, sy, 3, x, y, frame);
-            }
-            if (!WATER_TILES[tileAt(m, x + 1, y)])
-            {
-                foamEdge(g, sx, sy, 1, x, y, frame);
+                nt2 = tileAt(m, x + NX[q], y + NY[q]);
+                if (nt2 === want)
+                {
+                    g.drawImage(waterDepthEdge(q, toDeep, ev), sx, sy);
+                }
+                else if (!WATER_TILES[nt2])
+                {
+                    g.drawImage(waterFoam(q, frame & 3, ev), sx - 3, sy - 3);
+                }
             }
         }
     }
@@ -7337,6 +7809,21 @@ function drawObject(g, o, cam, season, tick)
             break;
         case 'stump':
             g.drawImage(sprStump(), x, y);
+            break;
+        case 'lamp':
+            g.drawImage(sprLamp(lampsLit()), x + 4, y + TILE - 64);
+            break;
+        case 'bench':
+            g.drawImage(sprBench(), x - 8, y + TILE - 36);
+            break;
+        case 'planter':
+            g.drawImage(sprPlanter(season), x, y + TILE - 40);
+            break;
+        case 'barrel':
+            g.drawImage(sprBarrel(), x + 2, y + TILE - 34);
+            break;
+        case 'crate':
+            g.drawImage(sprCrate(), x + 2, y + TILE - 28);
             break;
         case 'rock':
             g.drawImage(sprRock(o.rk), x, y);
@@ -7842,61 +8329,6 @@ function drawMinecart(g, x, y)
     pr(g, x + 6, y + 8, 20, 8, '#3a2a18');
     pe(g, x + 9, y + 21, 4, 4, '#3a3a42');
     pe(g, x + 23, y + 21, 4, 4, '#3a3a42');
-}
-
-// A flat 2px white bar along every water tile edge made every shoreline a
-// straight line. Both edges of the foam have to wobble: wobbling only the water
-// side still leaves the tile boundary as a hard rule across the screen.
-// side: 0 top, 1 right, 2 bottom, 3 left.
-function foamEdge(g, sx, sy, side, x, y, frame)
-{
-    var c, up, d, seed = x * 19 + y * 7;
-    for (c = 0; c < TILE; c += 2)
-    {
-        up = Math.floor(hash2(seed + c, frame, 105) * 3);
-        d = 2 + Math.floor(hash2(seed + c, frame, 101) * 3);
-        var tail = hash2(c, seed + frame, 103) > .58;
-        if (side === 0)
-        {
-            g.fillStyle = 'rgba(74,56,34,.20)';
-            g.fillRect(sx + c, sy - up - 3, 2, 3);
-            pr(g, sx + c, sy - up, 2, up + d, 'rgba(240,250,255,.72)');
-            if (tail)
-            {
-                pr(g, sx + c, sy + d, 2, 1, 'rgba(214,238,255,.42)');
-            }
-        }
-        else if (side === 2)
-        {
-            g.fillStyle = 'rgba(74,56,34,.20)';
-            g.fillRect(sx + c, sy + TILE + up, 2, 3);
-            pr(g, sx + c, sy + TILE - d, 2, up + d, 'rgba(232,246,255,.62)');
-            if (tail)
-            {
-                pr(g, sx + c, sy + TILE - d - 1, 2, 1, 'rgba(214,238,255,.36)');
-            }
-        }
-        else if (side === 3)
-        {
-            g.fillStyle = 'rgba(74,56,34,.20)';
-            g.fillRect(sx - up - 3, sy + c, 3, 2);
-            pr(g, sx - up, sy + c, up + d, 2, 'rgba(240,250,255,.68)');
-            if (tail)
-            {
-                pr(g, sx + d, sy + c, 1, 2, 'rgba(214,238,255,.4)');
-            }
-        }
-        else
-        {
-            g.fillStyle = 'rgba(74,56,34,.20)';
-            g.fillRect(sx + TILE + up, sy + c, 3, 2);
-            pr(g, sx + TILE - d, sy + c, up + d, 2, 'rgba(240,250,255,.68)');
-            if (tail)
-            {
-                pr(g, sx + TILE - d - 1, sy + c, 1, 2, 'rgba(214,238,255,.4)');
-            }
-        }
-    }
 }
 
 
@@ -18729,12 +19161,63 @@ function applyAmbient(g)
     }
     if (a.dark > .12)
     {
+        lampLights(g, a.dark);
         lightPool(g, a.dark);
     }
     if (S.weather === 'storm' && Math.random() < .005)
     {
         g.fillStyle = 'rgba(226,238,255,.45)';
         g.fillRect(0, 0, W, H);
+    }
+}
+
+// Street lamps cast their own pool. Only the ones on screen are considered,
+// and the whole thing runs after the darkness wash so it reads as light rather
+// than as a lighter patch of ground.
+function lampLights(g, strength)
+{
+    if (!MAP || !MAP.objects || !lampsLit())
+    {
+        return;
+    }
+    var i, n = MAP.objects.length;
+    for (i = 0; i < n; i++)
+    {
+        var o = MAP.objects[i];
+        if (o.kind !== 'lamp')
+        {
+            continue;
+        }
+        var px = o.x * TILE + HALF + 4 - CAM.x;
+        var py = o.y * TILE + TILE - 50 - CAM.y;
+        if (px < -140 || py < -140 || px > VIEW.w + 140 || py > VIEW.h + 140)
+        {
+            continue;
+        }
+        // A wide soft pool just lifts the whole plaza a little and reads as
+        // fog. Keep it tight and strong so it reads as a lamp.
+        var s2 = Math.min(1, strength * 1.9);
+        var r = 86;
+        var lg = g.createRadialGradient(px, py, 2, px, py, r);
+        lg.addColorStop(0, 'rgba(255,240,196,' + (s2 * .78) + ')');
+        lg.addColorStop(.22, 'rgba(255,226,152,' + (s2 * .40) + ')');
+        lg.addColorStop(.55, 'rgba(255,214,132,' + (s2 * .14) + ')');
+        lg.addColorStop(1, 'rgba(255,214,132,0)');
+        g.fillStyle = lg;
+        g.fillRect(px - r, py - r, r * 2, r * 2);
+        // the glass itself blooms
+        var bg = g.createRadialGradient(px, py, 0, px, py, 13);
+        bg.addColorStop(0, 'rgba(255,252,232,' + (s2 * .85) + ')');
+        bg.addColorStop(1, 'rgba(255,244,200,0)');
+        g.fillStyle = bg;
+        g.fillRect(px - 13, py - 13, 26, 26);
+        // and a pool of light on the ground at the foot of the post
+        var gr = g.createRadialGradient(px, py + 46, 2, px, py + 46, 44);
+        gr.addColorStop(0, 'rgba(255,230,166,' + (s2 * .34) + ')');
+        gr.addColorStop(.5, 'rgba(255,226,158,' + (s2 * .15) + ')');
+        gr.addColorStop(1, 'rgba(255,226,158,0)');
+        g.fillStyle = gr;
+        g.fillRect(px - 44, py + 2, 88, 88);
     }
 }
 
