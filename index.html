@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.6';
+var GAME_VER = '2.7';
 
 // ---------- core constants ----------
 
@@ -5757,6 +5757,23 @@ function sprParticle(kind)
             pe(g, 6, 6, 4, 2, '#c8742a');
             pr(g, 4, 5, 2, 1, '#e8a04a');
             pr(g, 2, 6, 8, 1, '#9a4e18');
+        }
+        else if (kind === 'heart')
+        {
+            pe(g, 4, 5, 2, 2, '#e8567a');
+            pe(g, 8, 5, 2, 2, '#e8567a');
+            pr(g, 3, 5, 7, 3, '#e8567a');
+            pr(g, 4, 8, 5, 1, '#e8567a');
+            pr(g, 5, 9, 3, 1, '#c8395e');
+            pr(g, 6, 10, 1, 1, '#c8395e');
+            pr(g, 4, 4, 2, 1, '#f79ab0');
+        }
+        else if (kind === 'fishmark')
+        {
+            pe(g, 5, 6, 4, 2, '#8fd0f0');
+            pr(g, 8, 5, 3, 3, '#8fd0f0');
+            pr(g, 3, 5, 1, 1, '#1a3a52');
+            pr(g, 2, 6, 4, 1, 'rgba(143,208,240,.6)');
         }
         else if (kind === 'spark')
         {
@@ -14601,6 +14618,11 @@ function festivalSpot(d, f)
     {
         return null;
     }
+    // your dance partner leaves the line and comes to you
+    if (f.kind === 'dance' && festGet('danced') === d.id && MAP && MAP.id === f.map)
+    {
+        return festPartnerSpot();
+    }
     var s = festSlots(f);
     if (!s.slots.length)
     {
@@ -14980,6 +15002,25 @@ function festivalIdle(a, f, dt)
 
     if (f.kind === 'dance')
     {
+        // your partner faces you and mirrors your side of the step
+        if (festGet('danced') === a.id)
+        {
+            var s3 = Math.sin(t * 1.9);
+            a.sway = s3 * 7;
+            var ddx = S.px - a.x, ddy = S.py - a.y;
+            if (Math.abs(ddx) > Math.abs(ddy))
+            {
+                a.dir = 2;
+                a.flip = ddx > 0;
+            }
+            else
+            {
+                a.dir = ddy < 0 ? 1 : 0;
+                a.flip = false;
+            }
+            a.frame = (Math.floor(TICK * .15 + ph) % 4);
+            return;
+        }
         // step side to side, partners mirroring each other across the arch
         var row = (a.ty <= FEST_FOCUS.dance[1]) ? 0 : 1;
         var s = Math.sin(t * 1.6 + row * Math.PI);
@@ -15119,6 +15160,11 @@ function festivalLine(id)
     if (sp)
     {
         return sp;
+    }
+    var rl = festRoleLine(id, f.kind);
+    if (rl)
+    {
+        return rl;
     }
     var pool = FEST_TALK[f.kind];
     if (!pool || !pool.length)
@@ -15994,6 +16040,229 @@ function festSpouseLine(id)
         return null;
     }
     return FEST_SPOUSE[f.kind] || null;
+}
+
+// ---------- who is talking ----------
+// One line per festival made every shopkeeper sound like every teenager. Roles
+// are derived from data that already exists (who runs a shop, who is a marriage
+// candidate) so nothing has to be tagged by hand.
+var FEST_ROLE = null;
+
+function festRoleOf(id)
+{
+    if (!FEST_ROLE)
+    {
+        FEST_ROLE = {};
+        var i, k;
+        // shopkeepers and the people who staff a building
+        for (k in INTERIORS)
+        {
+            if (INTERIORS.hasOwnProperty(k) && INTERIORS[k].npc)
+            {
+                FEST_ROLE[INTERIORS[k].npc.id] = 'shop';
+            }
+        }
+        for (i = 0; i < NPCS.length; i++)
+        {
+            var d = NPCS[i];
+            if (d.wed && !FEST_ROLE[d.id])
+            {
+                FEST_ROLE[d.id] = 'young';
+            }
+        }
+        FEST_ROLE.evelyn = 'elder';
+        FEST_ROLE.george = 'elder';
+        FEST_ROLE.lewis = 'mayor';
+    }
+    return FEST_ROLE[id] || 'villager';
+}
+
+// A line that only makes sense coming from that kind of person. Roles without an
+// entry fall through to the shared pool, and so does everyone half the time, so
+// eleven shopkeepers do not chorus the same sentence.
+var FEST_ROLE_TALK = {
+    mayor: {
+        egg_hunt: '올해도 달걀은 내가 직접 숨겼다네. 쉽게는 못 찾을걸?',
+        dance: '꽃춤은 이 계곡에서 가장 오래된 행사야. 잘 봐 두게.',
+        soup: '총독님께서 오시니 다들 예의를 갖춰주게.',
+        jelly: '해파리가 오는 날짜는 달력에 적어 둔다네. 한 번도 틀린 적이 없어.',
+        fair: '심사는 공정하게 하겠네. 자네 작물도 기대하지.',
+        maze: '울타리는 오늘 아침에 옮겨 심었네. 하룻밤짜리 미로야.',
+        icefish: '얼음 두께는 내가 직접 확인했으니 안심하게.',
+        gift: '올 한 해 마을을 위해 애써줘서 고맙네.'
+    },
+    shop: {
+        egg_hunt: '오늘은 가게 문을 닫고 나왔어. 일 년에 하루뿐이니까.',
+        dance: '가게 일이 바빠도 이 날은 꼭 나와.',
+        soup: '좋은 재료는 아까워하지 말고 넣어. 값은 나중에 벌면 돼.',
+        jelly: '이런 밤엔 장사 생각이 안 나더라고.',
+        fair: '좌판 물건은 오늘만 파는 것들이야. 구경하고 가.',
+        maze: '미로 안에서 뭘 팔아볼까 했는데, 아무도 못 찾겠더군.',
+        icefish: '낚싯대 손질은 해뒀어? 필요하면 말하고.',
+        gift: '포장지는 내가 넉넉히 준비해 뒀어. 필요하면 가져가.'
+    },
+    elder: {
+        egg_hunt: '내가 어릴 적에도 이 광장에서 달걀을 찾았지.',
+        dance: '예전엔 나도 저기서 춤을 췄단다. 다리가 성할 때 말이야.',
+        soup: '수프는 재료보다 같이 먹는 사람이 중요한 법이야.',
+        jelly: '살면서 이 밤을 예순 번은 봤는데, 매번 처음 같아.',
+        fair: '요즘 젊은 사람들 농사 솜씨가 참 좋아졌어.',
+        maze: '나는 밖에서 구경만 하마. 길 잃으면 못 나올 나이야.',
+        icefish: '얼음 위는 조심하렴. 늙은이 말은 들어서 손해 없어.',
+        gift: '올해도 다 같이 무사히 겨울을 나는구나. 그거면 됐지.'
+    }
+};
+
+function festRoleLine(id, kind)
+{
+    var r = festRoleOf(id);
+    var pool = FEST_ROLE_TALK[r];
+    if (!pool || !pool[kind])
+    {
+        return null;
+    }
+    // There is only one mayor, so he always speaks in role. Shopkeepers and
+    // elders come in bunches, so half of them blend into the shared pool
+    // instead of chorusing the same sentence.
+    if (r === 'mayor')
+    {
+        return pool[kind];
+    }
+    return (festOrderIndex(id) % 2 === 0) ? pool[kind] : null;
+}
+
+// ---------- dancing with your partner ----------
+// Accepting a dance used to change a flag and nothing else. Now the partner
+// comes and stands with you, the two of you step in time, and hearts drift up.
+
+function festDancePartner()
+{
+    var f = festivalActive();
+    if (!f || f.kind !== 'dance')
+    {
+        return null;
+    }
+    var id = festGet('danced');
+    return (typeof id === 'string') ? id : null;
+}
+
+// the tile your partner should be standing on: right in front of you
+function festPartnerSpot()
+{
+    var px = Math.floor(S.px / TILE), py = Math.floor(S.py / TILE);
+    var cand = [[px, py - 1], [px + 1, py], [px - 1, py], [px, py + 1]];
+    var i;
+    for (i = 0; i < cand.length; i++)
+    {
+        if (!isSolid(MAP, cand[i][0], cand[i][1]))
+        {
+            return { map: MAP.id, x: cand[i][0], y: cand[i][1] };
+        }
+    }
+    return { map: MAP.id, x: px, y: py - 1 };
+}
+
+function drawDanceHearts(g)
+{
+    var id = festDancePartner();
+    if (!id || !MAP)
+    {
+        return;
+    }
+    var a = null, i;
+    for (i = 0; i < ACTORS.length; i++)
+    {
+        if (ACTORS[i].id === id)
+        {
+            a = ACTORS[i];
+        }
+    }
+    if (!a)
+    {
+        return;
+    }
+    var cx = ((S.px + a.x) / 2) - CAM.x;
+    var cy = ((S.py + a.y) / 2) - CAM.y - 46;
+    for (i = 0; i < 5; i++)
+    {
+        var t = ((TICK * .9 + i * 26) % 130) / 130;
+        var hx = cx + Math.sin(t * 6.2 + i * 1.7) * 14;
+        var hy = cy - t * 42;
+        var s = 1 - t;
+        g.globalAlpha = s * .9;
+        g.drawImage(sprParticle('heart'), Math.round(hx) - 6, Math.round(hy) - 6);
+        g.globalAlpha = 1;
+    }
+}
+
+// ---------- the ice fishing clock ----------
+// The countdown only lived in the corner chip, which is not where your eyes are
+// during a timed contest.
+function drawIceClock(g)
+{
+    if (!ICEFISH.on)
+    {
+        return;
+    }
+    var w = 150, x = (VIEW.w - w) / 2, y = 10;
+    var left = Math.max(0, ICEFISH.left);
+    var frac = left / 90;
+    g.fillStyle = 'rgba(20,26,44,.74)';
+    g.fillRect(x - 4, y - 4, w + 8, 40);
+    g.fillStyle = '#2f4a6a';
+    g.fillRect(x, y + 22, w, 8);
+    g.fillStyle = left <= 15 ? '#e0563a' : '#6ac0e8';
+    g.fillRect(x, y + 22, Math.round(w * frac), 8);
+    g.fillStyle = '#fdf6e0';
+    // clock digits drawn as blocks so no font is needed
+    var secs = Math.ceil(left);
+    var txt = String(secs);
+    var d, dx = x + w / 2 - (txt.length * 11) / 2;
+    for (d = 0; d < txt.length; d++)
+    {
+        drawDigit(g, dx + d * 11, y + 2, +txt.charAt(d), left <= 15 ? '#ffd0c0' : '#fdf6e0');
+    }
+    // catch count on the right
+    var ct = String(ICEFISH.caught);
+    g.drawImage(sprParticle('fishmark'), x + w - 30, y + 2);
+    for (d = 0; d < ct.length; d++)
+    {
+        drawDigit(g, x + w - 16 + d * 11, y + 2, +ct.charAt(d), '#cfe8ff');
+    }
+}
+
+// 3x5 block digits: the canvas has no font stack we control.
+var DIGIT_ROWS = [
+    ['111', '101', '101', '101', '111'], ['010', '110', '010', '010', '111'],
+    ['111', '001', '111', '100', '111'], ['111', '001', '111', '001', '111'],
+    ['101', '101', '111', '001', '001'], ['111', '100', '111', '001', '111'],
+    ['111', '100', '111', '101', '111'], ['111', '001', '010', '010', '010'],
+    ['111', '101', '111', '101', '111'], ['111', '101', '111', '001', '111']
+];
+
+function drawDigit(g, x, y, n, col)
+{
+    var rows = DIGIT_ROWS[n] || DIGIT_ROWS[0];
+    var r, c;
+    g.fillStyle = col;
+    for (r = 0; r < 5; r++)
+    {
+        for (c = 0; c < 3; c++)
+        {
+            if (rows[r].charAt(c) === '1')
+            {
+                g.fillRect(x + c * 3, y + r * 3, 3, 3);
+            }
+        }
+    }
+}
+
+// everything that sits on top of the finished frame
+function drawFestOverlay(g)
+{
+    drawFairShot(g);
+    drawIceClock(g);
+    drawDanceHearts(g);
 }
 
 
@@ -21411,7 +21680,7 @@ function render()
     }
 
     applyAmbient(g);
-    drawFairShot(g);
+    drawFestOverlay(g);
 
     // interaction hint
     drawHint(g);
