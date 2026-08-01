@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.3';
+var GAME_VER = '3.4';
 
 // ---------- core constants ----------
 
@@ -20281,7 +20281,8 @@ function askName()
     {
         var row = el('div');
         row.style.cssText = 'display:flex;align-items:center;gap:5px;margin:4px 0;flex-wrap:wrap;';
-        row.appendChild(el('span', 'hint', label));
+        var cap0 = el('span', 'hint', label);
+        row.appendChild(cap0);
         // An entry is either a bare value or a [value, caption] pair
         var btns = [];
         function mark()
@@ -20315,6 +20316,7 @@ function askName()
                 {
                     look[key] = v;
                     mark();
+                    syncBottom();
                     redraw();
                 };
                 btns.push({ b: b, v: v });
@@ -20322,8 +20324,27 @@ function askName()
             })(vals[i]);
         }
         mark();
-        marks.push({ key: key, vals: vals, mark: mark });
+        marks.push({ key: key, vals: vals, mark: mark, row: row, cap: cap0 });
         m.body.appendChild(row);
+    }
+
+    // The bottom colour paints trousers or a skirt, but a dress is drawn in the
+    // top colour from collar to hem - so on 원피스 this row genuinely does
+    // nothing. Say so instead of letting a tap silently have no effect.
+    function syncBottom()
+    {
+        var i;
+        for (i = 0; i < marks.length; i++)
+        {
+            if (marks[i].key !== 'pants')
+            {
+                continue;
+            }
+            var dress = look.outfit === 'dress';
+            marks[i].cap.textContent = dress ? '하의 (원피스는 위 색을 써요)'
+                : (look.outfit === 'skirt' ? '치마 색' : '바지 색');
+            marks[i].row.style.opacity = dress ? '.45' : '1';
+        }
     }
 
     // Thirteen rows of pickers is a lot to work through one at a time. One tap
@@ -20344,6 +20365,7 @@ function askName()
         {
             marks[i].mark();
         }
+        syncBottom();
         redraw();
     };
     m.body.appendChild(dice);
@@ -20362,8 +20384,10 @@ function askName()
     picker('주근깨', 'freckles', [[false, '없음'], [true, '있음']]);
 
     m.body.appendChild(el('div', 'sectionTitle', '옷'));
-    picker('윗옷', 'shirt', ['#4a7ac8', '#c85a48', '#5a9a4a', '#d8a838', '#a858c8', '#e0e0e8', '#3a3a4a']);
     picker('옷차림', 'outfit', [['pants', '바지'], ['skirt', '치마'], ['dress', '원피스']]);
+    picker('윗옷 색', 'shirt', ['#4a7ac8', '#c85a48', '#5a9a4a', '#d8a838', '#a858c8', '#e0e0e8', '#3a3a4a']);
+    picker('바지 색', 'pants', ['#3a4a6a', '#5a3a24', '#3a3a42', '#3a6a4a', '#c85a8a', '#6a4a8a', '#c8b090']);
+    syncBottom();
 
     m.body.appendChild(el('div', 'sectionTitle', '반려동물'));
     var petKind = 'dog';
