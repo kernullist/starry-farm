@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.0';
+var GAME_VER = '3.1';
 
 // ---------- core constants ----------
 
@@ -2768,6 +2768,160 @@ var HAIR_STYLES = ['bowl', 'long', 'spiky', 'bun', 'curly', 'short', 'pony', 'wa
 var BODY_FORMS = ['a', 'b'];
 var OUTFITS = ['pants', 'skirt', 'dress'];
 
+// ---------- faces ----------
+// The head is 15 rows. Every row is centred, so only the width is stored and
+// x falls out of it - a hand-written [x, w] table would be six variants deep
+// once face shape multiplies by body form.
+var FACE_SHAPES = ['round', 'oval', 'soft'];
+var EYE_SHAPES = ['round', 'narrow', 'wide'];
+var MOUTHS = ['smile', 'grin', 'small'];
+var EYE_COLORS = ['#33241a', '#4a2a10', '#3a7ac0', '#3a8a50', '#5a6a72', '#6a4a90'];
+
+// width offset per row, relative to the form's base width (16 or 14).
+// 'round' reproduces the table these replaced, pixel for pixel.
+// The hair fringe covers the top third, so only rows ~9 and below actually
+// show. A taper spread evenly over all 15 rows measured as a 13px difference -
+// almost all of it hidden. The jaw is where the shape has to happen.
+var FACE_ROWS = {
+    round: [-4, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -4, -8],
+    oval: [-6, -4, -2, 0, 0, 0, 0, 0, 0, -2, -2, -4, -6, -8, -10],
+    soft: [-2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -4]
+};
+
+// Eye geometry, relative to the head. lx/rx are the eye boxes, px/pxw the
+// profile box. 'round' reproduces what was drawn before, pixel for pixel.
+var EYE_SPEC = {
+    round: { lx: 10, rx: 18, w: 4, h: 4, y: 7, pw: 3, ph: 3, browY: 6, bw: 4, lash: [10, 21], px: 17, pxw: 5 },
+    narrow: { lx: 10, rx: 18, w: 4, h: 3, y: 8, pw: 3, ph: 2, browY: 6, bw: 4, lash: [10, 21], px: 17, pxw: 5 },
+    wide: { lx: 9, rx: 18, w: 5, h: 4, y: 7, pw: 4, ph: 3, browY: 6, bw: 5, lash: [9, 22], px: 16, pxw: 6 }
+};
+
+function drawFace(g, o, dir, hy, fo, fem, skin, hair, eye)
+{
+    var es = EYE_SPEC[o.eyes] || EYE_SPEC.round;
+    var mouth = o.mouth || 'smile';
+    var dark = tone(skin, -2.2);
+    var deep = mix(skin, '#4a1c14', .72);
+    var lip = mix(skin, '#c05a5a', .35);
+    var lid = tone(eye, -1.2);
+    var brow = tone(hair, -1);
+
+    if (dir === 0)
+    {
+        var el = es.lx + fo, er = es.rx - fo;
+        pr(g, el, hy + es.y, es.w, es.h, '#fdfdfa');
+        pr(g, er, hy + es.y, es.w, es.h, '#fdfdfa');
+        pr(g, el + 1, hy + es.y + 1, es.pw, es.ph, eye);
+        pr(g, er + 1, hy + es.y + 1, es.pw, es.ph, eye);
+        pr(g, el + 1, hy + es.y + 1, 1, 1, '#ffffff');
+        pr(g, er + 1, hy + es.y + 1, 1, 1, '#ffffff');
+        pr(g, el + 2, hy + es.y + es.h - 1, 2, 1, lid);
+        pr(g, er + 2, hy + es.y + es.h - 1, 2, 1, lid);
+        pr(g, el, hy + es.browY, es.bw, 1, brow);
+        pr(g, er, hy + es.browY, es.bw, 1, brow);
+        if (fem)
+        {
+            // a single lash pixel flicking out at each outer corner
+            pr(g, es.lash[0], hy + es.browY, 1, 1, tone(hair, -1.6));
+            pr(g, es.lash[1], hy + es.browY, 1, 1, tone(hair, -1.6));
+        }
+        // nose
+        pr(g, 15, hy + 10, 2, 2, tone(skin, -1.3));
+        // Blush goes down before the mouth: it covers rows 11-12 out to x 13,
+        // which is exactly where a lifted mouth corner sits. Drawn the other
+        // way round the grin loses the two pixels that make it a grin.
+        if (o.blush !== false)
+        {
+            pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .38));
+            pr(g, 19 - fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
+        }
+        // Only three rows of chin to work with, so the mouth options trade on
+        // contrast rather than size - a one-pixel shape change at the default
+        // tone was measurable but invisible.
+        if (mouth === 'small')
+        {
+            pr(g, 15, hy + 13, 3, 1, dark);
+            pr(g, 15, hy + 14, 2, 1, lip);
+        }
+        else if (mouth === 'grin')
+        {
+            pr(g, 14, hy + 13, 4, 1, deep);
+            pr(g, 13, hy + 12, 1, 1, deep);
+            pr(g, 18, hy + 12, 1, 1, deep);
+            pr(g, 14, hy + 14, 4, 1, mix(skin, '#c05a5a', .55));
+        }
+        else
+        {
+            pr(g, 13, hy + 13, 6, 1, dark);
+            pr(g, 14, hy + 14, 4, 1, lip);
+        }
+        if (o.freckles)
+        {
+            var fk = mix(skin, '#a0603a', .5);
+            pr(g, 10 + fo, hy + 11, 1, 1, fk);
+            pr(g, 12 + fo, hy + 12, 1, 1, fk);
+            pr(g, 10 + fo, hy + 13, 1, 1, fk);
+            pr(g, 21 - fo, hy + 11, 1, 1, fk);
+            pr(g, 19 - fo, hy + 12, 1, 1, fk);
+            pr(g, 21 - fo, hy + 13, 1, 1, fk);
+        }
+        return;
+    }
+
+    if (dir !== 2)
+    {
+        return;
+    }
+    var ex = es.px - fo;
+    pr(g, ex, hy + es.y, es.pxw, es.h, '#fdfdfa');
+    pr(g, ex + 1, hy + es.y + 1, es.pw, Math.max(1, es.h - 1), eye);
+    pr(g, ex + 1, hy + es.y + 1, 1, 1, '#ffffff');
+    pr(g, ex, hy + es.browY, es.pxw, 1, brow);
+    if (fem)
+    {
+        // the profile lash does not take fo - it sits off the brow, not the eye
+        pr(g, es.px - 2, hy + es.browY, 1, 1, tone(hair, -1.6));
+    }
+    pr(g, 23 - fo, hy + 8, 2, 3, skin);              // nose in profile
+    pr(g, 24 - fo, hy + 9, 1, 2, tone(skin, -1.4));
+    pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
+    if (mouth === 'small')
+    {
+        pr(g, 21 - fo, hy + 13, 3, 1, dark);
+    }
+    else if (mouth === 'grin')
+    {
+        pr(g, 20 - fo, hy + 13, 4, 1, deep);
+        pr(g, 24 - fo, hy + 12, 1, 1, deep);
+        pr(g, 19 - fo, hy + 12, 1, 1, deep);
+    }
+    else
+    {
+        pr(g, 20 - fo, hy + 13, 5, 1, dark);
+    }
+    if (o.freckles)
+    {
+        var fk2 = mix(skin, '#a0603a', .5);
+        pr(g, 10 + fo, hy + 11, 1, 1, fk2);
+        pr(g, 12 + fo, hy + 12, 1, 1, fk2);
+    }
+}
+
+function headSpans(form, face)
+{
+    var base = (form === 'b') ? 14 : 16;
+    var rows = FACE_ROWS[face] || FACE_ROWS.round;
+    var out = [], r;
+    for (r = 0; r < rows.length; r++)
+    {
+        // 'b' is already two narrower, so its taper is softened by one on the
+        // rows that would otherwise pinch the chin into a point
+        var w = Math.max(6, base + rows[r] + ((form === 'b' && rows[r] <= -6) ? 2 : 0));
+        out.push([16 - w / 2, w]);
+    }
+    return out;
+}
+
 var PW = 32, PH = 54;
 
 // Step a tapering limb along a line. Drawing arms as axis-aligned blocks made
@@ -3037,20 +3191,7 @@ function drawPerson(g, o, dir, frame)
     // ---- head (y 6..21), 15 rows, tapering to a chin ----
     var hy = 6 - tall + bob;
     var hl = (act >= 0 && dir === 2) ? lean : 0;
-    var spans = [
-        [10, 12], [9, 14],
-        [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16],
-        [9, 14], [10, 12], [12, 8]
-    ];
-    if (fem)
-    {
-        // two pixels narrower with a longer taper into the chin
-        spans = [
-            [11, 10], [10, 12],
-            [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14],
-            [10, 12], [11, 10], [12, 8]
-        ];
-    }
+    var spans = headSpans(fem ? 'b' : 'a', o.face || 'round');
     // face features shift in by one on the narrow head
     var fo = fem ? 1 : 0;
     var r;
@@ -3072,49 +3213,7 @@ function drawPerson(g, o, dir, frame)
     }
     pr(g, 11, hy + 14, 10, 1, tone(skin, -1.4));
 
-    if (dir === 0)
-    {
-        pr(g, 10 + fo, hy + 7, 4, 4, '#fdfdfa');
-        pr(g, 18 - fo, hy + 7, 4, 4, '#fdfdfa');
-        pr(g, 11 + fo, hy + 8, 3, 3, eye);
-        pr(g, 19 - fo, hy + 8, 3, 3, eye);
-        pr(g, 11 + fo, hy + 8, 1, 1, '#ffffff');
-        pr(g, 19 - fo, hy + 8, 1, 1, '#ffffff');
-        pr(g, 12 + fo, hy + 10, 2, 1, tone(eye, -1.2));
-        pr(g, 20 - fo, hy + 10, 2, 1, tone(eye, -1.2));
-        pr(g, 10 + fo, hy + 6, 4, 1, tone(hair, -1));
-        pr(g, 18 - fo, hy + 6, 4, 1, tone(hair, -1));
-        if (fem)
-        {
-            // a single lash pixel flicking out at each outer corner
-            pr(g, 10, hy + 6, 1, 1, tone(hair, -1.6));
-            pr(g, 21, hy + 6, 1, 1, tone(hair, -1.6));
-        }
-        // nose + mouth
-        pr(g, 15, hy + 10, 2, 2, tone(skin, -1.3));
-        pr(g, 13, hy + 13, 6, 1, tone(skin, -2.2));
-        pr(g, 14, hy + 14, 4, 1, mix(skin, '#c05a5a', .35));
-        if (o.blush !== false)
-        {
-            pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .38));
-            pr(g, 19 - fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
-        }
-    }
-    else if (dir === 2)
-    {
-        pr(g, 17 - fo, hy + 7, 5, 4, '#fdfdfa');
-        pr(g, 18 - fo, hy + 8, 3, 3, eye);
-        pr(g, 18 - fo, hy + 8, 1, 1, '#ffffff');
-        pr(g, 17 - fo, hy + 6, 5, 1, tone(hair, -1));
-        if (fem)
-        {
-            pr(g, 15, hy + 6, 1, 1, tone(hair, -1.6));
-        }
-        pr(g, 23 - fo, hy + 8, 2, 3, skin);              // nose in profile
-        pr(g, 24 - fo, hy + 9, 1, 2, tone(skin, -1.4));
-        pr(g, 20 - fo, hy + 13, 5, 1, tone(skin, -2.2));
-        pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
-    }
+    drawFace(g, o, dir, hy, fo, fem, skin, hair, eye);
 
     drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin);
 
@@ -3237,7 +3336,9 @@ function drawHair(g, style, hair, dir, hy, skin)
 function personSprite(key, opt, dir, frame)
 {
     return bake('p:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' +
-        (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' + dir + ':' + frame, PW, PH, function (g)
+        (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' +
+        (opt.face || 'round') + ':' + (opt.eyes || 'round') + ':' + (opt.mouth || 'smile') + ':' +
+        (opt.eye || '') + ':' + (opt.freckles ? 1 : 0) + ':' + dir + ':' + frame, PW, PH, function (g)
     {
         drawPerson(g, opt, dir, frame);
     }, { outline: true });
@@ -9636,7 +9737,12 @@ function newGame(name, farmName)
         ver: GAME_VER,
         name: name || '농부',
         farmName: farmName || '별밤',
-        look: { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' },
+        look: {
+            skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+            shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
+            form: 'a', outfit: 'pants',
+            face: 'round', eyes: 'round', mouth: 'smile', eye: '#33241a', freckles: false
+        },
         year: 1, season: 0, day: 1, time: DAY_START,
         gold: 500,
         energy: BASE_ENERGY, maxEnergy: BASE_ENERGY,
@@ -11302,15 +11408,17 @@ function migrateSave(d)
     }
     def('look', { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' });
     // def() only fills a missing key, and an older save already has a look
-    // object - just one without these two fields. Without this an existing
-    // farmer's appearance would change out from under them on load.
-    if (d.look.form === undefined)
+    // object - just one without these fields. Without this an existing farmer's
+    // appearance would change out from under them on load. Every default here
+    // is exactly what used to be drawn.
+    var lookDef = { form: 'a', outfit: 'pants', face: 'round', eyes: 'round', mouth: 'smile', eye: '#33241a', freckles: false };
+    var lk;
+    for (lk in lookDef)
     {
-        d.look.form = 'a';
-    }
-    if (d.look.outfit === undefined)
-    {
-        d.look.outfit = 'pants';
+        if (lookDef.hasOwnProperty(lk) && d.look[lk] === undefined)
+        {
+            d.look[lk] = lookDef[lk];
+        }
     }
     def('festLog', []);
     def('maxEnergy', BASE_ENERGY);
@@ -13552,6 +13660,29 @@ function assignNpcBuild(npc)
         // Not every woman in a farming valley wears a skirt. Spread it off the
         // id hash so roughly a third do, and the rest keep their trousers.
         npc.look.outfit = (npc.look.form === 'b' && Math.floor(h / 15) % 3 === 0) ? 'skirt' : 'pants';
+    }
+    // Faces used to be identical on all 29, right down to a single shared eye
+    // colour - o.eye existed and nobody ever set it. Spread them off the same
+    // hash, using different divisors so the axes do not move together.
+    if (npc.look.face === undefined)
+    {
+        npc.look.face = FACE_SHAPES[Math.floor(h / 45) % FACE_SHAPES.length];
+    }
+    if (npc.look.eyes === undefined)
+    {
+        npc.look.eyes = EYE_SHAPES[Math.floor(h / 135) % EYE_SHAPES.length];
+    }
+    if (npc.look.eye === undefined)
+    {
+        npc.look.eye = EYE_COLORS[Math.floor(h / 405) % EYE_COLORS.length];
+    }
+    if (npc.look.mouth === undefined)
+    {
+        npc.look.mouth = MOUTHS[Math.floor(h / 2430) % MOUTHS.length];
+    }
+    if (npc.look.freckles === undefined)
+    {
+        npc.look.freckles = Math.floor(h / 7290) % 4 === 0;
     }
     return npc;
 }
@@ -19897,7 +20028,26 @@ function assertLoaded()
         ['NPC form', typeof NPC_BY_ID !== 'undefined' && NPC_BY_ID &&
             NPC_BY_ID.abigail && NPC_BY_ID.abigail.look.form === 'b' &&
             NPC_BY_ID.alex && NPC_BY_ID.alex.look.form === 'a'],
-        ['OUTFITS', typeof OUTFITS !== 'undefined' && OUTFITS && OUTFITS.length === 3]
+        ['OUTFITS', typeof OUTFITS !== 'undefined' && OUTFITS && OUTFITS.length === 3],
+        // o.eye was read by the sprite code but set by nobody, so all 29 shared
+        // one eye colour. Assert variety, not the field.
+        ['NPC faces', (function ()
+        {
+            if (typeof NPCS === 'undefined' || !NPCS || !NPCS.length)
+            {
+                return false;
+            }
+            var seen = {}, i;
+            for (i = 0; i < NPCS.length; i++)
+            {
+                if (!NPCS[i].look.eye || !NPCS[i].look.face)
+                {
+                    return false;
+                }
+                seen[NPCS[i].look.eye] = 1;
+            }
+            return Object.keys(seen).length >= 4;
+        })()]
     ];
     var missing = [], i;
     for (i = 0; i < need.length; i++)
@@ -20019,7 +20169,13 @@ function askName()
     m.body.appendChild(n2);
 
     m.body.appendChild(el('div', 'sectionTitle', '모습'));
-    var look = { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' };
+    var look = {
+        skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+        shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
+        form: 'a', outfit: 'pants',
+        face: 'round', eyes: 'round', mouth: 'smile', eye: EYE_COLORS[0], freckles: false
+    };
+    var marks = [];
     var prev = makeCv(48, 81);
     prev.style.cssText = 'width:48px;height:81px;image-rendering:pixelated;display:block;margin:0 auto 8px;';
     m.body.appendChild(prev);
@@ -20069,14 +20225,15 @@ function askName()
             {
                 var v = (typeof raw === 'string') ? raw : raw[0];
                 var cap = (typeof raw === 'string') ? '' : raw[1];
-                var isCol = v.charAt(0) === '#';
+                // values are not always strings - freckles is a boolean
+                var isCol = (typeof v === 'string') && v.charAt(0) === '#';
                 var b = el('button');
                 b.style.cssText = 'height:26px;min-width:26px;border-radius:6px;padding:0 6px;' +
                     'border:2px solid #4a2c14;cursor:pointer;font-family:inherit;font-size:11px;' +
                     'background:' + (isCol ? v : '#e8dcc0');
                 if (!isCol)
                 {
-                    b.textContent = cap || v.charAt(0).toUpperCase();
+                    b.textContent = cap || String(v).charAt(0).toUpperCase();
                 }
                 b.onclick = function ()
                 {
@@ -20089,13 +20246,46 @@ function askName()
             })(vals[i]);
         }
         mark();
+        marks.push({ key: key, vals: vals, mark: mark });
         m.body.appendChild(row);
     }
+
+    // Thirteen rows of pickers is a lot to work through one at a time. One tap
+    // that rolls the lot is more fun than any single row, and it is the way out
+    // for anyone who does not want to choose.
+    var dice = el('button', 'btn small', '🎲 무작위');
+    dice.style.cssText += 'display:block;margin:0 auto 8px;';
+    dice.onclick = function ()
+    {
+        var i;
+        for (i = 0; i < marks.length; i++)
+        {
+            var vals = marks[i].vals;
+            var raw = vals[Math.floor(Math.random() * vals.length)];
+            look[marks[i].key] = (typeof raw === 'string') ? raw : raw[0];
+        }
+        for (i = 0; i < marks.length; i++)
+        {
+            marks[i].mark();
+        }
+        redraw();
+    };
+    m.body.appendChild(dice);
+
     picker('성별', 'form', [['a', '남자'], ['b', '여자']]);
     picker('피부', 'skin', ['#f6dcc0', '#f0c8a0', '#d8a878', '#a87850', '#7a4a2a']);
     picker('머리색', 'hair', ['#3a2a1a', '#8a5a2a', '#d8a838', '#c84838', '#8a5ad0', '#48b8d0', '#e8e8e8']);
     picker('머리모양', 'hairStyle', HAIR_STYLES);
-    picker('옷', 'shirt', ['#4a7ac8', '#c85a48', '#5a9a4a', '#d8a838', '#a858c8', '#e0e0e8', '#3a3a4a']);
+
+    m.body.appendChild(el('div', 'sectionTitle', '얼굴'));
+    picker('얼굴형', 'face', [['round', '동글'], ['oval', '갸름'], ['soft', '통통']]);
+    picker('눈 모양', 'eyes', [['round', '큰눈'], ['narrow', '실눈'], ['wide', '왕눈']]);
+    picker('눈동자', 'eye', EYE_COLORS);
+    picker('입', 'mouth', [['smile', '보통'], ['grin', '활짝'], ['small', '작게']]);
+    picker('주근깨', 'freckles', [[false, '없음'], [true, '있음']]);
+
+    m.body.appendChild(el('div', 'sectionTitle', '옷'));
+    picker('윗옷', 'shirt', ['#4a7ac8', '#c85a48', '#5a9a4a', '#d8a838', '#a858c8', '#e0e0e8', '#3a3a4a']);
     picker('옷차림', 'outfit', [['pants', '바지'], ['skirt', '치마'], ['dress', '원피스']]);
 
     m.body.appendChild(el('div', 'sectionTitle', '반려동물'));
