@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.5';
+var GAME_VER = '3.6';
 
 // ---------- core constants ----------
 
@@ -1998,6 +1998,16 @@ var PROFESSIONS = {
 
 // ---------- shops ----------
 
+// --- hats (worn, not carried; kind 'hat' puts a 'wear' button on the item card) ---
+I('hat_straw', '밀짚모자', 'hat', 500, 'hat', ['#e0c060', '#a88820', '#f4e0a0'], { hatStyle: 'straw', hatCol: '#e0c060', desc: '햇볕 아래 일할 때 딱 좋다.' });
+I('hat_beanie', '털모자', 'hat', 800, 'hat', ['#c85a48', '#8a2a20', '#f09080'], { hatStyle: 'beanie', hatCol: '#c85a48', desc: '겨울 아침에 귀가 시리지 않다.' });
+I('hat_cap', '야구모자', 'hat', 1200, 'hat', ['#3a6ac8', '#20408a', '#7098f0'], { hatStyle: 'cap', hatCol: '#3a6ac8', desc: '챙이 앞으로 나와 눈이 덜 부시다.' });
+I('hat_cowboy', '카우보이 모자', 'hat', 2500, 'hat', ['#8a5a2a', '#5a3410', '#c08a50'], { hatStyle: 'cowboy', hatCol: '#8a5a2a', desc: '챙이 넓고 끝이 말려 올라가 있다.' });
+I('hat_wreath', '꽃 화관', 'hat', 0, 'hat', ['#f06a90', '#4a8a3a', '#fff8d0'], { hatStyle: 'wreath', hatCol: '#f06a90', desc: '꽃춤 축제에서 받은 화관. 시들지 않는다.' });
+I('hat_pumpkin', '호박 모자', 'hat', 0, 'hat', ['#e08830', '#a05010', '#f8b060'], { hatStyle: 'pumpkin', hatCol: '#e08830', desc: '유령의 밤 미로를 끝까지 걸은 사람만 쓴다.' });
+I('hat_santa', '산타 모자', 'hat', 0, 'hat', ['#c83a3a', '#8a1818', '#f4f4f8'], { hatStyle: 'santa', hatCol: '#c83a3a', desc: '겨울 별 축제의 선물. 방울이 달려 있다.' });
+I('hat_helmet', '광부 헬멧', 'hat', 0, 'hat', ['#d8b020', '#a07800', '#fff0a0'], { hatStyle: 'helmet', hatCol: '#d8b020', desc: '깊은 곳까지 내려간 사람에게 주어진다.' });
+
 var SHOPS = {
     pierre: {
         name: '피에르 잡화점', npc: 'pierre',
@@ -2038,6 +2048,10 @@ var SHOPS = {
             { id: 'sapling_apple', price: 4000 },
             { id: 'sapling_pomegranate', price: 6000 },
             { id: 'grass_starter', price: 100 },
+            { id: 'hat_straw' },
+            { id: 'hat_beanie' },
+            { id: 'hat_cap' },
+            { id: 'hat_cowboy', year: 2 },
             { id: 'fert_basic', price: 100 },
             { id: 'fert_quality', price: 150 },
             { id: 'speed_gro', price: 100 },
@@ -2776,6 +2790,7 @@ var FACE_SHAPES = ['round', 'oval', 'soft'];
 var EYE_SHAPES = ['round', 'narrow', 'wide'];
 var MOUTHS = ['smile', 'grin', 'small'];
 var EYE_COLORS = ['#33241a', '#4a2a10', '#3a7ac0', '#3a8a50', '#5a6a72', '#6a4a90'];
+var SHOE_COLORS = ['#4a2a12', '#2a2a30', '#8a6a3a', '#a03a3a', '#e0e0e8', '#3a5a80'];
 
 // width offset per row, relative to the form's base width (16 or 14).
 // 'round' reproduces the table these replaced, pixel for pixel.
@@ -2952,6 +2967,156 @@ function drawHand(g, hx, hy, skin, inner)
     pr(g, hx, hy + 1, 4, 2, skin);
     pr(g, hx + 1, hy + 3, 2, 1, tone(skin, -1.4));
     pr(g, hx + (inner < 0 ? 0 : 3), hy + 1, 1, 1, tone(skin, -.9));
+}
+
+// ---------- hats ----------
+// The old hat was six lines: one brim, one crown, colour only. Eight hats that
+// differ only in colour would repeat the mistake the hair styles just came out
+// of - at 32px the outline is the read, so the crown, the brim and the trim all
+// change per style.
+var HAT_STYLES = ['straw', 'beanie', 'cap', 'cowboy', 'wreath', 'pumpkin', 'santa', 'helmet'];
+
+var HAT_SPEC = {
+    straw: { crownH: 4, crownW: 16, brim: 5, band: '#8a5a2a' },
+    beanie: { crownH: 6, crownW: 16, brim: 0, cuff: 2, pom: 1 },
+    cap: { crownH: 4, crownW: 16, brim: 0, front: 1 },
+    cowboy: { crownH: 7, crownW: 14, brim: 6, curl: 1, band: '#e8d8a8' },
+    wreath: { crownH: 0, crownW: 16, brim: 0 },
+    pumpkin: { crownH: 5, crownW: 18, brim: 1, ribs: 1 },
+    santa: { crownH: 7, crownW: 14, brim: 0, cuff: 2, droop: 1, pom: 1 },
+    helmet: { crownH: 5, crownW: 18, brim: 2, lamp: 1 }
+};
+
+function drawHat(g, style, col, dir, hy)
+{
+    var sp = HAT_SPEC[style] || HAT_SPEC.straw;
+    var d1 = tone(col, -1.4), d2 = tone(col, -2.3), l1 = tone(col, 1.3);
+    // hy runs 3..9. Anything above y = 0 is cropped by bake without a word,
+    // which is how a tall villager's bun used to disappear - same guard here.
+    var ch = Math.min(sp.crownH, Math.max(1, hy - 1));
+    var cw = sp.crownW, cx = 16 - cw / 2;
+    var top = hy - 1 - ch;
+
+    if (style === 'wreath')
+    {
+        // no crown and no brim at all - a ring of flowers around the head
+        var FC = ['#f06a90', '#f0d060', '#e8e8f4', '#f09050', '#c07ad0', '#f06a90'];
+        var fi;
+        for (fi = 0; fi < 7; fi++)
+        {
+            var fx = 5 + fi * 3;
+            pe(g, fx + 1, hy, 2, 2, FC[fi % FC.length]);
+            pr(g, fx + 1, hy - 1, 1, 1, '#fff8d0');
+        }
+        pr(g, 5, hy + 1, 22, 1, '#4a8a3a');
+        pr(g, 5, hy + 2, 22, 1, tone('#4a8a3a', -1.6));
+        return;
+    }
+
+    // ---- crown ----
+    // Drawn row by row rather than as one block: a straight-sided crown on a
+    // brim reads as a bucket, so the cowboy hat needs to narrow toward the top.
+    // Tapering by erasing afterwards would punch a hole through the hair under it.
+    var taper = (style === 'cowboy') ? 2 : 0;
+    var cr;
+    for (cr = 0; cr <= ch; cr++)
+    {
+        var ins = (taper && cr < 2) ? taper : 0;
+        pr(g, cx + ins, top + cr, cw - ins * 2, 1, col);
+        pr(g, cx + ins, top + cr, 1, 1, l1);
+        pr(g, cx + cw - ins - 2, top + cr, 2, 1, d1);
+    }
+    pr(g, cx + taper, top, cw - taper * 2, 1, l1);
+
+    if (style === 'cowboy')
+    {
+        // the crease down the middle is the other half of what says cowboy
+        pr(g, 15, top, 2, 5, d2);
+        pr(g, cx + 3, top + 2, 1, 3, d1);
+        pr(g, cx + cw - 4, top + 2, 1, 3, d1);
+    }
+    if (sp.ribs)
+    {
+        pr(g, cx + 4, top, 1, ch + 1, d1);
+        pr(g, cx + 9, top, 1, ch + 1, d1);
+        pr(g, cx + 13, top, 1, ch + 1, d1);
+        pr(g, 15, Math.max(0, top - 2), 2, 2, '#4a7a2a');       // stem
+        pr(g, 15, Math.max(0, top - 2), 1, 1, '#6aa040');
+    }
+    if (sp.lamp)
+    {
+        // the headlamp only reads from the front and the side
+        if (dir !== 1)
+        {
+            pr(g, dir === 2 ? 20 : 14, top + 1, 4, 3, '#c8c8d0');
+            pr(g, dir === 2 ? 21 : 15, top + 2, 2, 1, '#fff0a0');
+        }
+        pr(g, cx, top + ch - 1, cw, 1, d2);
+    }
+    if (sp.band)
+    {
+        pr(g, cx, hy - 2, cw, 2, sp.band);
+        pr(g, cx, hy - 2, cw, 1, tone(sp.band, 1.2));
+    }
+
+    // ---- brim ----
+    if (sp.brim)
+    {
+        var bw = cw + sp.brim * 2, bx = 16 - bw / 2;
+        pr(g, bx, hy - 1, bw, 2, col);
+        pr(g, bx, hy - 1, bw, 1, l1);
+        pr(g, bx, hy + 1, bw, 1, d2);
+        if (sp.curl)
+        {
+            pr(g, bx, hy - 2, 3, 1, col);
+            pr(g, bx + bw - 3, hy - 2, 3, 1, col);
+        }
+    }
+    if (sp.front)
+    {
+        // a peak, not a brim: it only sticks out the way the face points
+        if (dir === 0)
+        {
+            pr(g, 10, hy, 12, 2, d1);
+            pr(g, 11, hy + 2, 10, 1, d2);
+        }
+        else if (dir === 2)
+        {
+            pr(g, 20, hy - 1, 9, 2, d1);
+            pr(g, 21, hy + 1, 8, 1, d2);
+        }
+        else
+        {
+            pr(g, cx, hy - 1, cw, 2, d1);
+        }
+    }
+
+    // ---- trim ----
+    if (sp.cuff)
+    {
+        var cc = (style === 'santa') ? '#f4f4f8' : l1;
+        pr(g, cx - 1, hy - 2, cw + 2, sp.cuff + 1, cc);
+        pr(g, cx - 1, hy + sp.cuff - 1, cw + 2, 1, tone(cc, -1.5));
+        pr(g, cx - 1, hy - 2, cw + 2, 1, tone(cc, 1.1));
+    }
+    if (sp.droop)
+    {
+        // the tail flops to one side; behind the head it hangs down the back
+        // the pom is 3px of radius on top of the tail's own offset, so the tail
+        // has to start well inside 32 or the bobble lands on the edge column
+        var tx = (dir === 2) ? 7 : 22;
+        var sgn = (dir === 2) ? -1 : 1;
+        pr(g, tx, top + 1, 5, 4, col);
+        pr(g, tx + sgn * 2, top + 4, 5, 4, col);
+        pr(g, tx + sgn * 3, top + 7, 4, 3, d1);
+        pe(g, tx + sgn * 4 + (dir === 2 ? 2 : 0), top + 10, 3, 3, '#f4f4f8');
+        return;
+    }
+    if (sp.pom)
+    {
+        pe(g, 16, Math.max(2, top - 1), 3, 3, '#f4f4f8');
+        pr(g, 15, Math.max(1, top - 2), 2, 1, '#ffffff');
+    }
 }
 
 // A skirt is one flaring trapezoid, not two trouser legs. The hem has to swing
@@ -3215,16 +3380,11 @@ function drawPerson(g, o, dir, frame)
 
     drawFace(g, o, dir, hy, fo, fem, skin, hair, eye);
 
-    drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin);
+    drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin, !!o.hat);
 
     if (o.hat)
     {
-        var ht = o.hat;
-        pr(g, 4, hy - 2, 24, 4, ht);
-        pr(g, 8, hy - 6, 16, 5, ht);
-        pr(g, 8, hy - 6, 16, 1, tone(ht, 1.2));
-        pr(g, 4, hy + 1, 24, 1, tone(ht, -2));
-        pr(g, 8, hy - 2, 16, 1, tone(ht, -1.4));
+        drawHat(g, o.hat.style, o.hat.col, dir, hy);
     }
 }
 
@@ -3250,7 +3410,7 @@ var HAIR_SPEC = {
     long: { rise: 4, wide: 0, fringe: [4, 3, 5, 3, 4, 3, 5, 3, 4, 3], ear: 10, nape: 8 }
 };
 
-function drawHair(g, style, hair, dir, hy, skin)
+function drawHair(g, style, hair, dir, hy, skin, capped)
 {
     var d1 = tone(hair, -1.2), d2 = tone(hair, -2.2);
     var l1 = tone(hair, 1.1), l2 = tone(hair, 2);
@@ -3361,7 +3521,7 @@ function drawHair(g, style, hair, dir, hy, skin)
         pr(g, 25, hy + 11, 5, 1, d1);
         pr(g, 5, hy + 4, 1, 5, l1);
     }
-    else if (style === 'spiky')
+    else if (style === 'spiky' && !capped)
     {
         pr(g, 6, roof + 3, 3, rise + 3, hair);
         pr(g, 10, roof + 1, 3, rise + 5, hair);
@@ -3373,9 +3533,12 @@ function drawHair(g, style, hair, dir, hy, skin)
     }
     else if (style === 'bun')
     {
-        orb(g, 16, roof + 4, 5, 4, hair, 1.4);
-        pr(g, 11, roof + 8, 10, 2, d1);        // the tie
-        pr(g, 12, roof + 8, 8, 1, d2);
+        if (!capped)
+        {
+            orb(g, 16, roof + 4, 5, 4, hair, 1.4);
+            pr(g, 11, roof + 8, 10, 2, d1);    // the tie
+            pr(g, 12, roof + 8, 8, 1, d2);
+        }
         pr(g, 6, hy + 3, 2, 4, hair);          // wisps at the temples
         pr(g, 24, hy + 3, 2, 4, hair);
     }
@@ -3385,9 +3548,12 @@ function drawHair(g, style, hair, dir, hy, skin)
         orb(g, 27, hy + 2, 4, 4, hair, 1.2);
         orb(g, 7, hy - 3, 4, 3, hair, 1.4);
         orb(g, 25, hy - 3, 4, 3, hair, 1.2);
-        orb(g, 11, roof + 3, 4, 3, hair, 1.4);
-        orb(g, 21, roof + 3, 4, 3, hair, 1.2);
-        orb(g, 16, roof + 3, 4, 3, hair, 1.4);   // +3 not +2: ry is 3, so +2 put the crown on row -1
+        if (!capped)
+        {
+            orb(g, 11, roof + 3, 4, 3, hair, 1.4);
+            orb(g, 21, roof + 3, 4, 3, hair, 1.2);
+            orb(g, 16, roof + 3, 4, 3, hair, 1.4);   // +3 not +2: ry is 3, so +2 put the crown on row -1
+        }
         orb(g, 6, hy + 8, 3, 3, hair, 1.1);
         orb(g, 26, hy + 8, 3, 3, hair, 1.1);
     }
@@ -3414,7 +3580,8 @@ function personSprite(key, opt, dir, frame)
     return bake('p:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' +
         (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' +
         (opt.face || 'round') + ':' + (opt.eyes || 'round') + ':' + (opt.mouth || 'smile') + ':' +
-        (opt.eye || '') + ':' + (opt.freckles ? 1 : 0) + ':' + dir + ':' + frame, PW, PH, function (g)
+        (opt.eye || '') + ':' + (opt.freckles ? 1 : 0) + ':' +
+        (opt.hat ? opt.hat.style + opt.hat.col : '-') + ':' + dir + ':' + frame, PW, PH, function (g)
     {
         drawPerson(g, opt, dir, frame);
     }, { outline: true });
@@ -4906,6 +5073,18 @@ function drawShape(g, shape, cols, ox, oy, s)
             E(11, 9, 3, 3, '#8a6428');
             crumbs(g, ox + 8 * k, oy + 7 * k, 8 * k, 7 * k, ['#4d3212'], 6, 3);
             break;
+        case 'hat':
+            // drawShape has no default branch, so a shape it does not know
+            // draws nothing at all - a hat with no icon in the bag or the shop
+            P(3, 13, 18, 4, a);
+            P(3, 13, 18, 1, c);
+            P(3, 16, 18, 1, b);
+            P(7, 6, 10, 8, a);
+            P(7, 6, 10, 1, c);
+            P(7, 11, 10, 2, b);
+            P(7, 6, 1, 8, c);
+            break;
+
         case 'star':
             var sp = [];
             var st;
@@ -9847,7 +10026,7 @@ function newGame(name, farmName)
         bundles: {},
         animals: [], farmBuildings: [],
         pendingBuild: null,
-        festLog: [], shipBin: [], shipped: {},
+        hat: null, festLog: [], shipBin: [], shipped: {},
         recipes: ['fried_egg', 'salad', 'bread'],
         crafts: ['chest', 'torch'],
         museum: {},
@@ -11496,6 +11675,7 @@ function migrateSave(d)
             d.look[lk] = lookDef[lk];
         }
     }
+    def('hat', null);
     def('festLog', []);
     def('maxEnergy', BASE_ENERGY);
     def('maxHealth', BASE_HEALTH);
@@ -12109,6 +12289,53 @@ function digArtifact(mapId, tx, ty)
     sfx('harvest');
     toast('🏺 ' + ITEMS[id].name + '을(를) 발굴했어요!');
     return id;
+}
+
+// ---------- hats ----------
+// Worn hats leave the bag entirely: S.hat holds the id, so it has to be in the
+// save (def('hat', null)) or an existing farmer's hat evaporates on load.
+function wearHat(idx)
+{
+    var sl = S.inv[idx];
+    if (!sl || !ITEMS[sl.id] || ITEMS[sl.id].kind !== 'hat')
+    {
+        return false;
+    }
+    var old = S.hat;
+    S.hat = sl.id;
+    S.inv[idx] = null;
+    if (old)
+    {
+        // give() drops it on the ground if the bag is full, same as everywhere else
+        give(old, 1);
+    }
+    toast(ITEMS[S.hat].name + '을(를) 썼어요.');
+    return true;
+}
+
+function takeOffHat()
+{
+    if (!S.hat)
+    {
+        toast('쓰고 있는 모자가 없어요.');
+        return false;
+    }
+    var id = S.hat;
+    S.hat = null;
+    give(id, 1);
+    toast(ITEMS[id].name + '을(를) 벗었어요.');
+    return true;
+}
+
+// what drawPerson needs: a style and a colour, not an item id
+function hatLook()
+{
+    if (!S.hat || !ITEMS[S.hat])
+    {
+        return null;
+    }
+    var it = ITEMS[S.hat];
+    return { style: it.hatStyle || 'straw', col: it.hatCol || it.cols[0] };
 }
 
 
@@ -12925,6 +13152,13 @@ function enterMine(floor)
     if (floor > S.mineDeep)
     {
         S.mineDeep = floor;
+        // one reward for getting deep, handed out once
+        if (floor >= 80 && !S.flags.gotHelmet)
+        {
+            S.flags.gotHelmet = true;
+            give('hat_helmet', 1);
+            toast('광부 헬멧을 얻었어요!');
+        }
     }
     S.px = m.entry.x * TILE + HALF;
     S.py = m.entry.y * TILE + HALF;
@@ -13759,6 +13993,12 @@ function assignNpcBuild(npc)
     if (npc.look.freckles === undefined)
     {
         npc.look.freckles = Math.floor(h / 7290) % 4 === 0;
+    }
+    // Every other look field was spread across the 29 and this one was not, so
+    // the whole town wore the same brown shoes.
+    if (npc.look.shoe === undefined)
+    {
+        npc.look.shoe = SHOE_COLORS[Math.floor(h / 29160) % SHOE_COLORS.length];
     }
     return npc;
 }
@@ -15514,6 +15754,11 @@ function checkMazeGoal()
     S.flags[festMazeKey()] = true;
     give('pumpkin_seeds', 5);
     give('purple_mushroom', 1);
+    if (!S.flags.gotPumpkinHat)
+    {
+        S.flags.gotPumpkinHat = true;
+        give('hat_pumpkin', 1);
+    }
     festLogAdd('maze', '유령의 밤', '미로를 통과해 사탕 바구니를 찾았다');
     festCheckDone();
     modalMsg('유령의 밤', '미로 한가운데에 도착했어요!\n\n사탕 바구니에서 호박 씨앗과 보라 버섯을 받았습니다.');
@@ -16312,6 +16557,11 @@ function festAskDance(actor)
             closeModal();
             festSet('danced', actor.id);
             addFriend(actor.id, 220);
+            if (!S.flags.gotWreath)
+            {
+                S.flags.gotWreath = true;
+                give('hat_wreath', 1);
+            }
             festLogAdd('dance', '꽃춤', actor.def.name + '와(과) 함께 춤을 췄다');
             showDialogue(actor.def, '좋아, 같이 추자!\n\n(둘이서 꽃 아치 아래에서 춤을 췄어요)');
             toast(actor.def.name + '와(과) 춤을 췄어요! 호감도가 크게 올랐습니다.');
@@ -16347,6 +16597,11 @@ function festGiveGift(actor)
         removeItem(sl.id, 1, sl.q);
         festSet('gifted', actor.id);
         addFriend(actor.id, [120, 200, 320][liked]);
+        if (!S.flags.gotSantaHat)
+        {
+            S.flags.gotSantaHat = true;
+            give('hat_santa', 1);
+        }
         var back = ['pumpkin_soup', 'cheese', 'coffee'][Math.floor(Math.random() * 3)];
         if (!ITEMS[back])
         {
@@ -18087,6 +18342,15 @@ function itemActions(idx)
             UI.lastHudKey = '';
         } });
     }
+    if (it.kind === 'hat')
+    {
+        btns.push({ t: '👒 쓰기', cls: 'green', cb: function ()
+        {
+            closeModal();
+            wearHat(idx);
+            UI.lastHudKey = '';
+        } });
+    }
     btns.push({ t: '✋ 손에 들기', cls: 'blue', cb: function ()
     {
         S.sel = idx;
@@ -18114,7 +18378,7 @@ function itemDesc(sl)
     var s = '';
     var kindKr = { tool: '도구', seed: '씨앗', crop: '작물', forage: '채집물', fish: '물고기',
         mineral: '광물', artisan: '가공품', cook: '요리', craft: '제작', resource: '자원',
-        animal: '축산물', misc: '기타' }[it.kind] || '';
+        animal: '축산물', hat: '모자', misc: '기타' }[it.kind] || '';
     s += kindKr;
     if (it.price > 0 || sl.px)
     {
@@ -19198,6 +19462,19 @@ function openMenu()
     };
     m.body.appendChild(b);
 
+    if (S.hat)
+    {
+        var bh = el('button', 'btn small gray', '👒 ' + ITEMS[S.hat].name + ' 벗기');
+        bh.style.cssText += 'width:100%;margin-top:6px;';
+        bh.onclick = function ()
+        {
+            takeOffHat();
+            closeModal();
+            UI.lastHudKey = '';
+        };
+        m.body.appendChild(bh);
+    }
+
     m.body.appendChild(el('div', 'sectionTitle', '조작'));
     var ctrlRow = el('div');
     ctrlRow.style.cssText = 'display:flex;gap:6px;';
@@ -20105,6 +20382,21 @@ function assertLoaded()
             NPC_BY_ID.abigail && NPC_BY_ID.abigail.look.form === 'b' &&
             NPC_BY_ID.alex && NPC_BY_ID.alex.look.form === 'a'],
         ['OUTFITS', typeof OUTFITS !== 'undefined' && OUTFITS && OUTFITS.length === 3],
+        // eight hats, each with a spec to draw it and an item to obtain it
+        ['hats', typeof HAT_STYLES !== 'undefined' && HAT_STYLES && HAT_STYLES.length === 8 &&
+            (function ()
+            {
+                var i;
+                for (i = 0; i < HAT_STYLES.length; i++)
+                {
+                    if (!HAT_SPEC[HAT_STYLES[i]])
+                    {
+                        return false;
+                    }
+                }
+                return typeof ITEMS !== 'undefined' && ITEMS.hat_straw && ITEMS.hat_santa &&
+                    ITEMS.hat_straw.kind === 'hat';
+            })()],
         // o.eye was read by the sprite code but set by nobody, so all 29 shared
         // one eye colour. Assert variety, not the field.
         ['NPC faces', (function ()
@@ -22553,7 +22845,24 @@ function drawPlayer(g)
     {
         g.globalAlpha = .5;
     }
-    var spr = personSprite('me', S.look, dir, frame);
+    // S.look is the saved appearance; the hat is worn state, so it rides
+    // along for the draw without being stored in the look itself
+    var hl = hatLook();
+    var me = S.look;
+    if (hl)
+    {
+        me = {};
+        var lk;
+        for (lk in S.look)
+        {
+            if (S.look.hasOwnProperty(lk))
+            {
+                me[lk] = S.look[lk];
+            }
+        }
+        me.hat = hl;
+    }
+    var spr = personSprite('me', me, dir, frame);
     if (flip)
     {
         g.save();
