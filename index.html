@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '2.9';
+var GAME_VER = '3.0';
 
 // ---------- core constants ----------
 
@@ -2762,6 +2762,12 @@ function bake(key, w, h, fn, opt)
 
 var HAIR_STYLES = ['bowl', 'long', 'spiky', 'bun', 'curly', 'short', 'pony', 'wave'];
 
+// Body silhouette and clothing are two independent choices. This is a farming
+// game - a girl in dungarees has to be as reachable as a girl in a dress, and
+// tying the outfit to the body would cut six combinations down to two.
+var BODY_FORMS = ['a', 'b'];
+var OUTFITS = ['pants', 'skirt', 'dress'];
+
 var PW = 32, PH = 54;
 
 // Step a tapering limb along a line. Drawing arms as axis-aligned blocks made
@@ -2794,6 +2800,31 @@ function drawHand(g, hx, hy, skin, inner)
     pr(g, hx + (inner < 0 ? 0 : 3), hy + 1, 1, 1, tone(skin, -.9));
 }
 
+// A skirt is one flaring trapezoid, not two trouser legs. The hem has to swing
+// with the walk cycle - without that the thighs are hidden and the character
+// reads as gliding rather than walking.
+function drawSkirt(g, y0, y1, wTop, wBot, sway, col)
+{
+    var rows = Math.max(1, y1 - y0);
+    var r, w = wTop, x = 16 - Math.round(wTop / 2);
+    for (r = 0; r <= rows; r++)
+    {
+        var t = r / rows;
+        w = Math.round(wTop + (wBot - wTop) * t);
+        x = Math.round(16 - w / 2 + sway * t);
+        pr(g, x, y0 + r, w, 1, col);
+        pr(g, x, y0 + r, 1, 1, tone(col, 1.1));
+        pr(g, x + w - 1, y0 + r, 1, 1, tone(col, -1.4));
+        if (r > 1 && r < rows)
+        {
+            // two pleats that spread with the flare
+            pr(g, x + 2 + Math.round(t * 2), y0 + r, 1, 1, tone(col, -.8));
+            pr(g, x + w - 3 - Math.round(t * 2), y0 + r, 1, 1, tone(col, -.8));
+        }
+    }
+    pr(g, x, y0 + rows, w, 1, tone(col, -1.9));
+}
+
 function drawPerson(g, o, dir, frame)
 {
     var skin = o.skin || '#f0c8a0';
@@ -2810,6 +2841,17 @@ function drawPerson(g, o, dir, frame)
     // the torso. Small ranges on purpose - variety, not deformity.
     var tall = Math.max(-2, Math.min(2, o.tall || 0));
     var wide = Math.max(0, Math.min(2, o.wide || 0));
+    // form 'b' is the narrower build: shoulders in, a waist, hips back out.
+    // At 32px wide the silhouette plus hair plus outfit carries the read, so
+    // there is deliberately no chest shape - it would be one ambiguous pixel.
+    var fem = o.form === 'b';
+    if (fem)
+    {
+        // a wide setting of 2 on top of the narrow build reads as a barrel
+        wide = Math.min(1, wide);
+    }
+    var outfit = o.outfit || 'pants';
+    var skirted = outfit === 'skirt' || outfit === 'dress';
     var step = (frame === 1) ? 1 : ((frame === 3) ? -1 : 0);
     var bob = (frame === 1 || frame === 3) ? -1 : 0;
     if (act >= 0)
@@ -2825,55 +2867,100 @@ function drawPerson(g, o, dir, frame)
     // almost half the sprite, which reads as a bobblehead toy.
     // ---- legs (y 34..50) ----
     var legTop = 34 - tall + bob;
-    var lx = 10, rx = 17;
+    var lw = fem ? 4 : 5;
+    var sw = lw + 1;                              // the shoe overhangs the leg
+    var lx = fem ? 11 : 10, rx = 17;
     var lLen = 12 + tall + (step > 0 ? -2 : 0);
     var rLen = 12 + tall + (step < 0 ? -2 : 0);
     if (act >= 0)
     {
         // braced stance: feet wider apart
-        lx = 8;
+        lx = fem ? 9 : 8;
         rx = 19;
     }
-    pr(g, lx, legTop, 5, lLen, pants);
-    pr(g, rx, legTop, 5, rLen, pants);
-    pr(g, lx, legTop, 1, lLen, tone(pants, 1));
-    pr(g, rx + 4, legTop, 1, rLen, tone(pants, -1.4));
-    pr(g, lx, legTop + lLen - 1, 5, 1, tone(pants, -1.6));
-    pr(g, rx, legTop + rLen - 1, 5, 1, tone(pants, -1.6));
-    pr(g, lx + 1, legTop + 3, 1, lLen - 5, tone(pants, -.8));
-    pr(g, rx + 1, legTop + 3, 1, rLen - 5, tone(pants, -.8));
+    // under a skirt the calf is bare, so the leg is drawn in skin and the
+    // skirt is laid over the top of it later
+    var legCol = skirted ? skin : pants;
+    pr(g, lx, legTop, lw, lLen, legCol);
+    pr(g, rx, legTop, lw, rLen, legCol);
+    pr(g, lx, legTop, 1, lLen, tone(legCol, 1));
+    pr(g, rx + lw - 1, legTop, 1, rLen, tone(legCol, -1.4));
+    pr(g, lx, legTop + lLen - 1, lw, 1, tone(legCol, -1.6));
+    pr(g, rx, legTop + rLen - 1, lw, 1, tone(legCol, -1.6));
+    pr(g, lx + 1, legTop + 3, 1, lLen - 5, tone(legCol, -.8));
+    pr(g, rx + 1, legTop + 3, 1, rLen - 5, tone(legCol, -.8));
     // shoes
-    pr(g, lx - 1, legTop + lLen, 6, 4, shoe);
-    pr(g, rx, legTop + rLen, 6, 4, shoe);
-    pr(g, lx - 1, legTop + lLen, 6, 1, tone(shoe, 1.2));
-    pr(g, rx, legTop + rLen, 6, 1, tone(shoe, 1.2));
-    pr(g, lx - 1, legTop + lLen + 3, 6, 1, tone(shoe, -1.6));
-    pr(g, rx, legTop + rLen + 3, 6, 1, tone(shoe, -1.6));
+    pr(g, lx - 1, legTop + lLen, sw, 4, shoe);
+    pr(g, rx, legTop + rLen, sw, 4, shoe);
+    pr(g, lx - 1, legTop + lLen, sw, 1, tone(shoe, 1.2));
+    pr(g, rx, legTop + rLen, sw, 1, tone(shoe, 1.2));
+    pr(g, lx - 1, legTop + lLen + 3, sw, 1, tone(shoe, -1.6));
+    pr(g, rx, legTop + rLen + 3, sw, 1, tone(shoe, -1.6));
 
     // ---- torso (y 21..36) ----
     var ty = 21 - tall + bob;
     var tl = (act >= 0 && dir === 2) ? lean : 0;   // sideways lean reads best in profile
-    var bx = 8 - wide, bw = 16 + wide * 2;
-    pr(g, bx + 2 + tl, ty, bw - 4, 1, shirt);
-    pr(g, bx + 1 + tl, ty + 1, bw - 2, 1, shirt);
-    pr(g, bx + tl, ty + 2, bw, 13, shirt);
-    pr(g, bx, ty + 2, 3, 13, tone(shirt, .9));                 // lit side
-    pr(g, bx + bw - 3, ty + 2, 3, 13, tone(shirt, -1.2));      // shaded side
-    pr(g, bx + 2, ty, bw - 4, 1, tone(shirt, 1.5));            // shoulder highlight
-    pr(g, bx + 1, ty + 1, bw - 2, 1, tone(shirt, 1.2));
-    pr(g, bx, ty + 13, bw, 2, tone(shirt, -1.7));              // hem shadow
-    // belt
-    pr(g, bx, ty + 11, bw, 3, tone(pants, -.6));
-    pr(g, bx, ty + 11, bw, 1, tone(pants, .9));
-    pr(g, 14, ty + 11, 4, 3, '#d8b048');
-    pr(g, 15, ty + 12, 2, 1, '#8a6a18');
+    var bx = (fem ? 9 : 8) - wide, bw = (fem ? 14 : 16) + wide * 2;
+    // Per-row insets, the same way the head is built from spans. The 'a' build
+    // is a straight slab below the shoulder taper; 'b' pulls in through rows
+    // 6..10 and lets the hip return to full width at the belt. That waist is
+    // what actually carries the silhouette at 32px, more than any other pixel.
+    var tw = [2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    if (fem)
+    {
+        tw = [2, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0];
+    }
+    var tr, rowX, rowW;
+    for (tr = 0; tr < 15; tr++)
+    {
+        rowX = bx + tw[tr];
+        rowW = bw - tw[tr] * 2;
+        pr(g, rowX + tl, ty + tr, rowW, 1, shirt);
+        if (tr < 2)
+        {
+            // the shoulder highlight deliberately does not take the lean - it
+            // leaves a one-pixel sliver of base shirt on the leading edge, and
+            // matching that exactly is what keeps every existing farmer and
+            // villager byte-identical to before
+            pr(g, rowX, ty + tr, rowW, 1, tone(shirt, tr === 0 ? 1.5 : 1.2));
+            continue;
+        }
+        pr(g, rowX, ty + tr, 3, 1, tone(shirt, .9));            // lit side
+        pr(g, rowX + rowW - 3, ty + tr, 3, 1, tone(shirt, -1.2));   // shaded side
+        if (tr >= 13)
+        {
+            pr(g, rowX, ty + tr, rowW, 1, tone(shirt, -1.7));   // hem shadow
+        }
+    }
+    // belt - a dress runs straight through, so it only gets a waist seam
+    if (outfit === 'dress')
+    {
+        pr(g, bx, ty + 11, bw, 1, tone(shirt, -1.6));
+        pr(g, bx + 2, ty + 12, bw - 4, 1, tone(shirt, .8));
+    }
+    else
+    {
+        pr(g, bx, ty + 11, bw, 3, tone(pants, -.6));
+        pr(g, bx, ty + 11, bw, 1, tone(pants, .9));
+        pr(g, 14, ty + 11, 4, 3, '#d8b048');
+        pr(g, 15, ty + 12, 2, 1, '#8a6a18');
+    }
     // fold hints
     pr(g, 13, ty + 5, 1, 6, tone(shirt, -.8));
     pr(g, 18, ty + 6, 1, 5, tone(shirt, -.8));
     // collar with a v-notch
-    pr(g, 11, ty, 10, 2, tone(shirt, -1.9));
+    pr(g, fem ? 12 : 11, ty, fem ? 8 : 10, 2, tone(shirt, -1.9));
     pr(g, 13, ty, 6, 2, tone(skin, -1.2));
     pr(g, 14, ty + 2, 4, 1, tone(skin, -1.8));
+    if (skirted)
+    {
+        // the braced tool stance puts the feet further apart, so the hem has to
+        // widen with it or the legs poke out through the sides of the skirt
+        drawSkirt(g, ty + (outfit === 'dress' ? 12 : 11),
+            legTop + (outfit === 'dress' ? 8 : 5),
+            bw, bw + (act >= 0 ? 9 : 6),
+            act >= 0 ? 0 : step, outfit === 'dress' ? shirt : pants);
+    }
 
     // ---- arms ----
     var swing = step * 2;
@@ -2902,13 +2989,15 @@ function drawPerson(g, o, dir, frame)
             gy = ty + [-7, 16, 5][act];
         }
         var shy = ty + 4;
+        // shoulders follow the torso: the narrow build brings them in one pixel
+        var shl = (fem ? 13 : 12) - wide, shr = (fem ? 19 : 20) + wide;
         // elbow sits part way out along the arc so the limb bends
-        var elx = (12 - wide + gx) / 2 + (dir === 2 ? 2 : -2);
-        var erx = (20 + wide + gx) / 2 + (dir === 2 ? 2 : 2);
+        var elx = (shl + gx) / 2 + (dir === 2 ? 2 : -2);
+        var erx = (shr + gx) / 2 + (dir === 2 ? 2 : 2);
         var ely = (shy + gy) / 2 + 2;
-        drawLimb(g, 12 - wide, shy, elx, ely, 5, 4, shirt);
+        drawLimb(g, shl, shy, elx, ely, 5, 4, shirt);
         drawLimb(g, elx, ely, gx - 2, gy, 4, 4, shirt);
-        drawLimb(g, 20 + wide, shy, erx, ely, 5, 4, shirt);
+        drawLimb(g, shr, shy, erx, ely, 5, 4, shirt);
         drawLimb(g, erx, ely, gx + 2, gy, 4, 4, shirt);
         // cuffs, then the two hands meeting on the grip
         pr(g, gx - 5, gy - 1, 4, 2, tone(shirt, -1.8));
@@ -2918,22 +3007,31 @@ function drawPerson(g, o, dir, frame)
     }
     else if (dir === 2)
     {
-        pr(g, 12, ty + 3 + swing, 5, 9, shirt);
-        pr(g, 12, ty + 3 + swing, 1, 9, tone(shirt, 1));
-        pr(g, 12, ty + 11 + swing, 5, 2, tone(shirt, -1.8));   // cuff
-        drawHand(g, 12, ty + 13 + swing, skin, 1);
+        var apx = fem ? 13 : 12;
+        pr(g, apx, ty + 3 + swing, 5, 9, shirt);
+        pr(g, apx, ty + 3 + swing, 1, 9, tone(shirt, 1));
+        pr(g, apx, ty + 11 + swing, 5, 2, tone(shirt, -1.8));   // cuff
+        drawHand(g, apx, ty + 13 + swing, skin, 1);
     }
     else
     {
-        var alx = 4 - wide, arx = 23 + wide;
-        pr(g, alx, ty + 3 - swing, 5, 9, shirt);
-        pr(g, arx, ty + 3 + swing, 5, 9, shirt);
-        pr(g, alx, ty + 3 - swing, 1, 9, tone(shirt, 1));
-        pr(g, arx + 4, ty + 3 + swing, 1, 9, tone(shirt, -1.4));
-        pr(g, alx, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
-        pr(g, arx, ty + 11 + swing, 5, 2, tone(shirt, -1.8));
-        drawHand(g, alx + 1, ty + 13 - swing, skin, 1);
-        drawHand(g, arx, ty + 13 + swing, skin, -1);
+        var alx = (fem ? 5 : 4) - wide, arx = (fem ? 22 : 23) + wide;
+        // A hanging arm sits directly over the waist, so a waist cut into the
+        // torso alone is invisible - measured, it changed nothing. The forearm
+        // has to follow the body in for the silhouette to actually narrow.
+        var ain = fem ? 1 : 0;
+        pr(g, alx, ty + 3 - swing, 5, 5, shirt);
+        pr(g, arx, ty + 3 + swing, 5, 5, shirt);
+        pr(g, alx + ain, ty + 8 - swing, 5, 4, shirt);
+        pr(g, arx - ain, ty + 8 + swing, 5, 4, shirt);
+        pr(g, alx, ty + 3 - swing, 1, 5, tone(shirt, 1));
+        pr(g, alx + ain, ty + 8 - swing, 1, 4, tone(shirt, 1));
+        pr(g, arx + 4, ty + 3 + swing, 1, 5, tone(shirt, -1.4));
+        pr(g, arx - ain + 4, ty + 8 + swing, 1, 4, tone(shirt, -1.4));
+        pr(g, alx + ain, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
+        pr(g, arx - ain, ty + 11 + swing, 5, 2, tone(shirt, -1.8));
+        drawHand(g, alx + ain + 1, ty + 13 - swing, skin, 1);
+        drawHand(g, arx - ain, ty + 13 + swing, skin, -1);
     }
 
     // ---- head (y 6..21), 15 rows, tapering to a chin ----
@@ -2944,12 +3042,23 @@ function drawPerson(g, o, dir, frame)
         [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16], [8, 16],
         [9, 14], [10, 12], [12, 8]
     ];
+    if (fem)
+    {
+        // two pixels narrower with a longer taper into the chin
+        spans = [
+            [11, 10], [10, 12],
+            [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14], [9, 14],
+            [10, 12], [11, 10], [12, 8]
+        ];
+    }
+    // face features shift in by one on the narrow head
+    var fo = fem ? 1 : 0;
     var r;
     // ears sit behind the face spans
-    pr(g, 6, hy + 7, 3, 4, tone(skin, -.6));
-    pr(g, 23, hy + 7, 3, 4, tone(skin, -1.1));
-    pr(g, 7, hy + 8, 1, 2, tone(skin, -1.8));
-    pr(g, 24, hy + 8, 1, 2, tone(skin, -1.8));
+    pr(g, 6 + fo, hy + 7, 3, 4, tone(skin, -.6));
+    pr(g, 23 - fo, hy + 7, 3, 4, tone(skin, -1.1));
+    pr(g, 7 + fo, hy + 8, 1, 2, tone(skin, -1.8));
+    pr(g, 24 - fo, hy + 8, 1, 2, tone(skin, -1.8));
     for (r = 0; r < spans.length; r++)
     {
         pr(g, spans[r][0] + hl, hy + r, spans[r][1], 1, skin);
@@ -2965,36 +3074,46 @@ function drawPerson(g, o, dir, frame)
 
     if (dir === 0)
     {
-        pr(g, 10, hy + 7, 4, 4, '#fdfdfa');
-        pr(g, 18, hy + 7, 4, 4, '#fdfdfa');
-        pr(g, 11, hy + 8, 3, 3, eye);
-        pr(g, 19, hy + 8, 3, 3, eye);
-        pr(g, 11, hy + 8, 1, 1, '#ffffff');
-        pr(g, 19, hy + 8, 1, 1, '#ffffff');
-        pr(g, 12, hy + 10, 2, 1, tone(eye, -1.2));
-        pr(g, 20, hy + 10, 2, 1, tone(eye, -1.2));
-        pr(g, 10, hy + 6, 4, 1, tone(hair, -1));
-        pr(g, 18, hy + 6, 4, 1, tone(hair, -1));
+        pr(g, 10 + fo, hy + 7, 4, 4, '#fdfdfa');
+        pr(g, 18 - fo, hy + 7, 4, 4, '#fdfdfa');
+        pr(g, 11 + fo, hy + 8, 3, 3, eye);
+        pr(g, 19 - fo, hy + 8, 3, 3, eye);
+        pr(g, 11 + fo, hy + 8, 1, 1, '#ffffff');
+        pr(g, 19 - fo, hy + 8, 1, 1, '#ffffff');
+        pr(g, 12 + fo, hy + 10, 2, 1, tone(eye, -1.2));
+        pr(g, 20 - fo, hy + 10, 2, 1, tone(eye, -1.2));
+        pr(g, 10 + fo, hy + 6, 4, 1, tone(hair, -1));
+        pr(g, 18 - fo, hy + 6, 4, 1, tone(hair, -1));
+        if (fem)
+        {
+            // a single lash pixel flicking out at each outer corner
+            pr(g, 10, hy + 6, 1, 1, tone(hair, -1.6));
+            pr(g, 21, hy + 6, 1, 1, tone(hair, -1.6));
+        }
         // nose + mouth
         pr(g, 15, hy + 10, 2, 2, tone(skin, -1.3));
         pr(g, 13, hy + 13, 6, 1, tone(skin, -2.2));
         pr(g, 14, hy + 14, 4, 1, mix(skin, '#c05a5a', .35));
         if (o.blush !== false)
         {
-            pr(g, 9, hy + 11, 4, 2, mix(skin, '#e07a86', .38));
-            pr(g, 19, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
+            pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .38));
+            pr(g, 19 - fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
         }
     }
     else if (dir === 2)
     {
-        pr(g, 17, hy + 7, 5, 4, '#fdfdfa');
-        pr(g, 18, hy + 8, 3, 3, eye);
-        pr(g, 18, hy + 8, 1, 1, '#ffffff');
-        pr(g, 17, hy + 6, 5, 1, tone(hair, -1));
-        pr(g, 23, hy + 8, 2, 3, skin);              // nose in profile
-        pr(g, 24, hy + 9, 1, 2, tone(skin, -1.4));
-        pr(g, 20, hy + 13, 5, 1, tone(skin, -2.2));
-        pr(g, 9, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
+        pr(g, 17 - fo, hy + 7, 5, 4, '#fdfdfa');
+        pr(g, 18 - fo, hy + 8, 3, 3, eye);
+        pr(g, 18 - fo, hy + 8, 1, 1, '#ffffff');
+        pr(g, 17 - fo, hy + 6, 5, 1, tone(hair, -1));
+        if (fem)
+        {
+            pr(g, 15, hy + 6, 1, 1, tone(hair, -1.6));
+        }
+        pr(g, 23 - fo, hy + 8, 2, 3, skin);              // nose in profile
+        pr(g, 24 - fo, hy + 9, 1, 2, tone(skin, -1.4));
+        pr(g, 20 - fo, hy + 13, 5, 1, tone(skin, -2.2));
+        pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
     }
 
     drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin);
@@ -3117,7 +3236,8 @@ function drawHair(g, style, hair, dir, hy, skin)
 
 function personSprite(key, opt, dir, frame)
 {
-    return bake('p:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' + dir + ':' + frame, PW, PH, function (g)
+    return bake('p:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' +
+        (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' + dir + ':' + frame, PW, PH, function (g)
     {
         drawPerson(g, opt, dir, frame);
     }, { outline: true });
@@ -9516,7 +9636,7 @@ function newGame(name, farmName)
         ver: GAME_VER,
         name: name || '농부',
         farmName: farmName || '별밤',
-        look: { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12' },
+        look: { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' },
         year: 1, season: 0, day: 1, time: DAY_START,
         gold: 500,
         energy: BASE_ENERGY, maxEnergy: BASE_ENERGY,
@@ -11180,7 +11300,18 @@ function migrateSave(d)
             d[k] = v;
         }
     }
-    def('look', { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12' });
+    def('look', { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' });
+    // def() only fills a missing key, and an older save already has a look
+    // object - just one without these two fields. Without this an existing
+    // farmer's appearance would change out from under them on load.
+    if (d.look.form === undefined)
+    {
+        d.look.form = 'a';
+    }
+    if (d.look.outfit === undefined)
+    {
+        d.look.outfit = 'pants';
+    }
     def('festLog', []);
     def('maxEnergy', BASE_ENERGY);
     def('maxHealth', BASE_HEALTH);
@@ -13408,6 +13539,19 @@ function assignNpcBuild(npc)
     if (npc.look.wide === undefined)
     {
         npc.look.wide = Math.floor(h / 5) % 3;
+    }
+    // Every villager has carried a gender field since the first version and
+    // nothing ever read it, so all 29 were drawn on the same body. This is the
+    // line that makes the field mean something.
+    if (npc.look.form === undefined)
+    {
+        npc.look.form = npc.gender === 'f' ? 'b' : 'a';
+    }
+    if (npc.look.outfit === undefined)
+    {
+        // Not every woman in a farming valley wears a skirt. Spread it off the
+        // id hash so roughly a third do, and the rest keep their trousers.
+        npc.look.outfit = (npc.look.form === 'b' && Math.floor(h / 15) % 3 === 0) ? 'skirt' : 'pants';
     }
     return npc;
 }
@@ -19747,7 +19891,13 @@ function assertLoaded()
         // table with a single "undefined" key and the ground fringe never ran.
         ['EDGE_PRI', typeof EDGE_PRI !== 'undefined' && EDGE_PRI &&
             EDGE_PRI[T_GRASS] !== undefined && EDGE_PRI[T_SAND] !== undefined &&
-            EDGE_PRI.undefined === undefined]
+            EDGE_PRI.undefined === undefined],
+        // gender sat on all 29 villagers for nine versions without ever being
+        // read. Assert the wiring, not the field.
+        ['NPC form', typeof NPC_BY_ID !== 'undefined' && NPC_BY_ID &&
+            NPC_BY_ID.abigail && NPC_BY_ID.abigail.look.form === 'b' &&
+            NPC_BY_ID.alex && NPC_BY_ID.alex.look.form === 'a'],
+        ['OUTFITS', typeof OUTFITS !== 'undefined' && OUTFITS && OUTFITS.length === 3]
     ];
     var missing = [], i;
     for (i = 0; i < need.length; i++)
@@ -19869,7 +20019,7 @@ function askName()
     m.body.appendChild(n2);
 
     m.body.appendChild(el('div', 'sectionTitle', '모습'));
-    var look = { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12' };
+    var look = { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' };
     var prev = makeCv(48, 81);
     prev.style.cssText = 'width:48px;height:81px;image-rendering:pixelated;display:block;margin:0 auto 8px;';
     m.body.appendChild(prev);
@@ -19879,9 +20029,19 @@ function askName()
         var g = prev.getContext('2d');
         g.imageSmoothingEnabled = false;
         g.clearRect(0, 0, 48, 81);
-        SPR_CACHE['p:newlook:0:0'] = null;
-        delete SPR_CACHE['p:newlook:0:0'];
-        g.drawImage(personSprite('newlook' + Math.random(), look, 0, 0), 0, 0, PW, PH, 0, 0, 48, 81);
+        // The bake key does not carry colours, and this preview changes in
+        // place, so drop every frame cached for it. The old code sidestepped
+        // the cache with a random key instead, which baked a new sprite on
+        // every tap and never freed one.
+        var k;
+        for (k in SPR_CACHE)
+        {
+            if (SPR_CACHE.hasOwnProperty(k) && k.indexOf('p:newlook:') === 0)
+            {
+                delete SPR_CACHE[k];
+            }
+        }
+        g.drawImage(personSprite('newlook', look, 0, 0), 0, 0, PW, PH, 0, 0, 48, 81);
     }
     redraw();
 
@@ -19890,34 +20050,53 @@ function askName()
         var row = el('div');
         row.style.cssText = 'display:flex;align-items:center;gap:5px;margin:4px 0;flex-wrap:wrap;';
         row.appendChild(el('span', 'hint', label));
+        // An entry is either a bare value or a [value, caption] pair
+        var btns = [];
+        function mark()
+        {
+            var j;
+            for (j = 0; j < btns.length; j++)
+            {
+                var on = look[key] === btns[j].v;
+                btns[j].b.style.borderColor = on ? '#f4d878' : '#4a2c14';
+                btns[j].b.style.boxShadow = on ? '0 0 0 2px #7a4a12' : 'none';
+            }
+        }
         var i;
         for (i = 0; i < vals.length; i++)
         {
-            (function (v)
+            (function (raw)
             {
+                var v = (typeof raw === 'string') ? raw : raw[0];
+                var cap = (typeof raw === 'string') ? '' : raw[1];
+                var isCol = v.charAt(0) === '#';
                 var b = el('button');
-                b.style.cssText = 'width:26px;height:26px;border-radius:6px;border:2px solid #4a2c14;cursor:pointer;background:' +
-                    (typeof v === 'string' && v.charAt(0) === '#' ? v : '#e8dcc0');
-                if (typeof v === 'string' && v.charAt(0) !== '#')
+                b.style.cssText = 'height:26px;min-width:26px;border-radius:6px;padding:0 6px;' +
+                    'border:2px solid #4a2c14;cursor:pointer;font-family:inherit;font-size:11px;' +
+                    'background:' + (isCol ? v : '#e8dcc0');
+                if (!isCol)
                 {
-                    b.textContent = v.charAt(0).toUpperCase();
-                    b.style.fontSize = '11px';
-                    b.style.fontFamily = 'inherit';
+                    b.textContent = cap || v.charAt(0).toUpperCase();
                 }
                 b.onclick = function ()
                 {
                     look[key] = v;
+                    mark();
                     redraw();
                 };
+                btns.push({ b: b, v: v });
                 row.appendChild(b);
             })(vals[i]);
         }
+        mark();
         m.body.appendChild(row);
     }
+    picker('성별', 'form', [['a', '남자'], ['b', '여자']]);
     picker('피부', 'skin', ['#f6dcc0', '#f0c8a0', '#d8a878', '#a87850', '#7a4a2a']);
     picker('머리색', 'hair', ['#3a2a1a', '#8a5a2a', '#d8a838', '#c84838', '#8a5ad0', '#48b8d0', '#e8e8e8']);
     picker('머리모양', 'hairStyle', HAIR_STYLES);
     picker('옷', 'shirt', ['#4a7ac8', '#c85a48', '#5a9a4a', '#d8a838', '#a858c8', '#e0e0e8', '#3a3a4a']);
+    picker('옷차림', 'outfit', [['pants', '바지'], ['skirt', '치마'], ['dress', '원피스']]);
 
     m.body.appendChild(el('div', 'sectionTitle', '반려동물'));
     var petKind = 'dog';
