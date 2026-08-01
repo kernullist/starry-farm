@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.2';
+var GAME_VER = '3.3';
 
 // ---------- core constants ----------
 
@@ -3246,7 +3246,7 @@ var HAIR_SPEC = {
     bun: { rise: 2, wide: -1, fringe: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0], ear: 3, nape: 2 },
     curly: { rise: 4, wide: 1, fringe: [3, 5, 3, 5, 3, 5, 3, 5, 3, 5], ear: 7, nape: 4 },
     pony: { rise: 3, wide: -1, fringe: [5, 4, 3, 2, 1, 1, 2, 3, 3, 2], ear: 3, nape: 2 },
-    wave: { rise: 4, wide: 0, fringe: [3, 4, 3, 2, 3, 4, 3, 4, 3, 4], ear: 8, nape: 6 },
+    wave: { rise: 4, wide: 0, fringe: [3, 4, 3, 2, 3, 4, 3, 4, 3, 4], ear: 8, nape: 4 },
     long: { rise: 4, wide: 0, fringe: [4, 3, 5, 3, 4, 3, 5, 3, 4, 3], ear: 10, nape: 8 }
 };
 
@@ -3345,18 +3345,21 @@ function drawHair(g, style, hair, dir, hy, skin)
     {
         // the outer edge jogs in and out, and the ends flick outwards - that
         // flick is the difference from 'long', not the length
+        // Shoulder length, stopping well above the collar. The flick only reads
+        // as a difference from 'long' if the two are not the same length - at
+        // hy+23 against long's hy+25 they were two rows apart and looked alike.
         var wv;
-        for (wv = 0; wv < 12; wv++)
+        for (wv = 0; wv < 8; wv++)
         {
             var jog = (wv % 4 < 2) ? 0 : 1;
             pr(g, 4 - jog, hy + 2 + wv, 3 + jog, 1, hair);
             pr(g, 25, hy + 2 + wv, 3 + jog, 1, hair);
         }
-        pr(g, 2, hy + 13, 5, 2, hair);
-        pr(g, 25, hy + 13, 5, 2, hair);
-        pr(g, 2, hy + 15, 5, 1, d1);
-        pr(g, 25, hy + 15, 5, 1, d1);
-        pr(g, 5, hy + 4, 1, 6, l1);
+        pr(g, 2, hy + 9, 5, 2, hair);
+        pr(g, 25, hy + 9, 5, 2, hair);
+        pr(g, 2, hy + 11, 5, 1, d1);
+        pr(g, 25, hy + 11, 5, 1, d1);
+        pr(g, 5, hy + 4, 1, 5, l1);
     }
     else if (style === 'spiky')
     {
