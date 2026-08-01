@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.1';
+var GAME_VER = '3.2';
 
 // ---------- core constants ----------
 
@@ -3228,108 +3228,181 @@ function drawPerson(g, o, dir, frame)
     }
 }
 
+// Eight styles used to share one skull cap and one fringe with a small ornament
+// on top, so they all read as "bowl cut plus accessory". Measured: bowl and
+// short differed by 8 pixels from the front and were byte-identical from
+// behind, and every pair had an identical silhouette. At 32px the outline is
+// the whole read, so the cap itself has to change per style.
+//
+// rise  - how far the dome climbs above the head
+// wide  - temple width relative to the default
+// fringe- bang depth per 2px column (max 5: the brows sit at hy+6)
+// ear   - how far the side of the cap falls (>= 7 covers the ear)
+// nape  - back-of-head length below the skull
+var HAIR_SPEC = {
+    bowl: { rise: 4, wide: 0, fringe: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4], ear: 9, nape: 4 },
+    short: { rise: 3, wide: -2, fringe: [2, 1, 3, 1, 2, 1, 3, 1, 2, 1], ear: 2, nape: 1 },
+    spiky: { rise: 3, wide: 0, fringe: [3, 5, 2, 5, 2, 5, 3, 4, 2, 4], ear: 4, nape: 2 },
+    bun: { rise: 2, wide: -1, fringe: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0], ear: 3, nape: 2 },
+    curly: { rise: 4, wide: 1, fringe: [3, 5, 3, 5, 3, 5, 3, 5, 3, 5], ear: 7, nape: 4 },
+    pony: { rise: 3, wide: -1, fringe: [5, 4, 3, 2, 1, 1, 2, 3, 3, 2], ear: 3, nape: 2 },
+    wave: { rise: 4, wide: 0, fringe: [3, 4, 3, 2, 3, 4, 3, 4, 3, 4], ear: 8, nape: 6 },
+    long: { rise: 4, wide: 0, fringe: [4, 3, 5, 3, 4, 3, 5, 3, 4, 3], ear: 10, nape: 8 }
+};
+
 function drawHair(g, style, hair, dir, hy, skin)
 {
     var d1 = tone(hair, -1.2), d2 = tone(hair, -2.2);
     var l1 = tone(hair, 1.1), l2 = tone(hair, 2);
+    var sp = HAIR_SPEC[style] || HAIR_SPEC.bowl;
+    var rise = sp.rise, wide = sp.wide;
+    var w0 = 12 + wide * 2, w1 = 16 + wide * 2, w2 = 18 + wide * 2;
+    var lx = 16 - w2 / 2, rx = 16 + w2 / 2;
+    // hy runs from 3 (tall villager, mid-stride) to 9. Anything drawn above
+    // y = 0 is silently cropped by bake, which is how a tall character's bun
+    // used to vanish entirely - so the tall ornaments hang off this instead of
+    // a fixed offset.
+    var lift = Math.min(8, hy);
+    var roof = hy - lift;
+    // the dome itself needs the same guard: at hy = 3 a rise of 4 put the
+    // crown on row -1 and lost it
+    rise = Math.min(rise, hy);
 
-    // skull cap sits ~4px above the head, not 6 - keeps the head from ballooning
-    pr(g, 10, hy - 4, 12, 2, hair);
-    pr(g, 8, hy - 3, 16, 3, hair);
-    pr(g, 7, hy - 1, 18, 4, hair);
-    pr(g, 6, hy + 1, 2, 5, hair);
-    pr(g, 24, hy + 1, 2, 5, hair);
-    pr(g, 5, hy + 2, 1, 3, d1);
-    pr(g, 26, hy + 2, 1, 3, d1);
-    // uneven fringe: the tips of the bangs sit at different heights
-    var fr = [4, 2, 5, 3, 2, 4, 2, 5, 3];
-    var fi;
-    for (fi = 0; fi < fr.length; fi++)
-    {
-        pr(g, 7 + fi * 2, hy, 2, fr[fi], hair);
-        pr(g, 7 + fi * 2, hy + fr[fi], 2, 1, d2);
-    }
-    // specular band (what makes hair read as hair rather than a helmet)
-    pr(g, 9, hy - 3, 9, 2, l1);
-    pr(g, 10, hy - 4, 6, 1, l2);
-    pr(g, 19, hy - 2, 4, 1, l1);
-    pr(g, 21, hy + 1, 3, 4, d1);
-    pr(g, 7, hy - 1, 2, 4, l1);
-
-    if (style === 'long')
-    {
-        pr(g, 4, hy + 2, 3, 15, hair);
-        pr(g, 25, hy + 2, 3, 15, hair);
-        pr(g, 4, hy + 13, 3, 4, d1);
-        pr(g, 25, hy + 13, 3, 4, d1);
-        pr(g, 5, hy + 4, 1, 7, l1);
-    }
-    else if (style === 'spiky')
-    {
-        pr(g, 7, hy - 6, 4, 3, hair);
-        pr(g, 13, hy - 8, 4, 5, hair);
-        pr(g, 20, hy - 6, 4, 3, hair);
-        pr(g, 14, hy - 8, 2, 3, l1);
-        pr(g, 8, hy - 6, 2, 2, l1);
-    }
-    else if (style === 'bun')
-    {
-        orb(g, 16, hy - 6, 5, 4, hair, 1.4);
-        pr(g, 12, hy - 3, 8, 2, d1);
-    }
-    else if (style === 'curly')
-    {
-        orb(g, 6, hy + 1, 4, 4, hair, 1.2);
-        orb(g, 26, hy + 1, 4, 4, hair, 1.2);
-        orb(g, 10, hy - 4, 4, 3, hair, 1.4);
-        orb(g, 22, hy - 4, 4, 3, hair, 1.2);
-        orb(g, 16, hy - 6, 4, 3, hair, 1.4);
-    }
-    else if (style === 'pony')
-    {
-        pr(g, 25, hy - 1, 5, 13, hair);
-        pr(g, 26, hy + 10, 4, 4, d1);
-        pr(g, 25, hy + 1, 2, 6, l1);
-        pr(g, 23, hy - 2, 4, 3, d1);
-    }
-    else if (style === 'wave')
-    {
-        pr(g, 4, hy + 2, 3, 10, hair);
-        pr(g, 25, hy + 2, 3, 10, hair);
-        pr(g, 5, hy + 10, 3, 3, d1);
-        pr(g, 24, hy + 10, 3, 3, d1);
-        pr(g, 5, hy + 4, 1, 5, l1);
-    }
-    else if (style === 'short')
-    {
-        pr(g, 6, hy + 1, 1, 4, d1);
-        pr(g, 25, hy + 1, 1, 4, d1);
-    }
+    // ---- dome ----
+    pr(g, 16 - w0 / 2, hy - rise, w0, 2, hair);
+    pr(g, 16 - w1 / 2, hy - rise + 1, w1, 3, hair);
+    pr(g, lx, hy - 1, w2, 4, hair);
+    // sides: how far these fall is what covers or exposes the ear
+    pr(g, lx - 1, hy + 1, 2, sp.ear, hair);
+    pr(g, rx - 1, hy + 1, 2, sp.ear, hair);
+    pr(g, lx - 2, hy + 2, 1, Math.max(1, sp.ear - 2), d1);
+    pr(g, rx + 1, hy + 2, 1, Math.max(1, sp.ear - 2), d1);
 
     if (dir === 1)
     {
-        // back of the head: hair covers the whole face area
-        pr(g, 8, hy - 3, 16, 17, hair);
-        pr(g, 7, hy - 1, 18, 13, hair);
-        pr(g, 6, hy + 1, 2, 9, hair);
-        pr(g, 24, hy + 1, 2, 9, hair);
-        pr(g, 10, hy - 4, 12, 2, hair);
-        // nape: shorter strands, then the neck below
-        pr(g, 9, hy + 11, 14, 3, d1);
-        pr(g, 10, hy + 13, 12, 2, d2);
+        // ---- back of the head ----
+        pr(g, 16 - w1 / 2, hy - rise + 1, w1, 17, hair);
+        pr(g, lx, hy - 1, w2, 13, hair);
+        pr(g, lx - 1, hy + 1, 2, 9, hair);
+        pr(g, rx - 1, hy + 1, 2, 9, hair);
+        pr(g, 16 - w0 / 2, hy - rise, w0, 2, hair);
+        // the nape is where a short cut and a long one part company
+        var nb = hy + 8 + Math.min(sp.nape, 4);
+        pr(g, lx + 1, nb, w2 - 2, 3, d1);
+        pr(g, lx + 2, nb + 2, w2 - 4, 2, d2);
+        // The neck is anatomy, not hair - it stays put and the hair covers more
+        // or less of it. Letting it slide down with the nape drew a skin band
+        // across the shoulders of every long-haired villager.
         pr(g, 12, hy + 14, 8, 2, tone(skin || '#f0c8a0', -1.4));
-        // parting + strand separations so the back of the head is not a flat block
-        pr(g, 15, hy - 4, 2, 15, d2);
-        pr(g, 14, hy - 4, 1, 15, d1);
-        pr(g, 10, hy - 2, 2, 13, d2);
-        pr(g, 19, hy - 2, 2, 13, d2);
-        pr(g, 12, hy - 2, 1, 13, d1);
-        pr(g, 21, hy - 2, 1, 13, d1);
-        pr(g, 8, hy + 2, 1, 9, d2);
-        pr(g, 23, hy + 2, 1, 9, d2);
-        pr(g, 9, hy - 3, 9, 2, l1);
-        pr(g, 10, hy - 4, 6, 1, l2);
-        pr(g, 19, hy - 2, 4, 1, l1);
+        if (sp.nape > 4)
+        {
+            pr(g, lx + 2, nb + 2, w2 - 4, sp.nape + 2, hair);
+            pr(g, lx + 3, nb + 4 + sp.nape, w2 - 6, 2, d1);
+        }
+        // parting and strand separations so it is not a flat block
+        pr(g, 15, hy - rise, 2, 15, d2);
+        pr(g, 14, hy - rise, 1, 15, d1);
+        pr(g, lx + 3, hy - 2, 2, 13, d2);
+        pr(g, rx - 5, hy - 2, 2, 13, d2);
+        pr(g, lx + 5, hy - 2, 1, 13, d1);
+        pr(g, rx - 3, hy - 2, 1, 13, d1);
+    }
+    else
+    {
+        // ---- fringe ----
+        var cols = w2 / 2, fi;
+        for (fi = 0; fi < cols; fi++)
+        {
+            var fd = sp.fringe[fi % sp.fringe.length];
+            if (!fd)
+            {
+                continue;
+            }
+            pr(g, lx + fi * 2, hy, 2, fd, hair);
+            pr(g, lx + fi * 2, hy + fd, 2, 1, d2);
+        }
+    }
+
+    // ---- specular band (what makes hair read as hair, not a helmet) ----
+    pr(g, 16 - w1 / 2 + 1, hy - rise + 1, w1 - 7, 2, l1);
+    pr(g, 16 - w0 / 2, hy - rise, w0 - 6, 1, l2);
+    pr(g, rx - 5, hy - rise + 2, 4, 1, l1);
+    pr(g, rx - 3, hy + 1, 3, 4, d1);
+    pr(g, lx, hy - 1, 2, 4, l1);
+
+    // ---- the part that actually tells the styles apart ----
+    // Drawn last on purpose: the back-of-head block above used to paint over
+    // these, which is why every style looked the same from behind.
+    if (style === 'long')
+    {
+        pr(g, 4, hy + 2, 3, 18, hair);
+        pr(g, 25, hy + 2, 3, 18, hair);
+        pr(g, 4, hy + 17, 3, 3, d1);
+        pr(g, 25, hy + 17, 3, 3, d1);
+        pr(g, 5, hy + 4, 1, 9, l1);
+    }
+    else if (style === 'wave')
+    {
+        // the outer edge jogs in and out, and the ends flick outwards - that
+        // flick is the difference from 'long', not the length
+        var wv;
+        for (wv = 0; wv < 12; wv++)
+        {
+            var jog = (wv % 4 < 2) ? 0 : 1;
+            pr(g, 4 - jog, hy + 2 + wv, 3 + jog, 1, hair);
+            pr(g, 25, hy + 2 + wv, 3 + jog, 1, hair);
+        }
+        pr(g, 2, hy + 13, 5, 2, hair);
+        pr(g, 25, hy + 13, 5, 2, hair);
+        pr(g, 2, hy + 15, 5, 1, d1);
+        pr(g, 25, hy + 15, 5, 1, d1);
+        pr(g, 5, hy + 4, 1, 6, l1);
+    }
+    else if (style === 'spiky')
+    {
+        pr(g, 6, roof + 3, 3, rise + 3, hair);
+        pr(g, 10, roof + 1, 3, rise + 5, hair);
+        pr(g, 15, roof, 3, rise + 6, hair);
+        pr(g, 19, roof + 1, 3, rise + 5, hair);
+        pr(g, 23, roof + 3, 3, rise + 3, hair);
+        pr(g, 15, roof, 1, 3, l1);
+        pr(g, 10, roof + 1, 1, 3, l1);
+    }
+    else if (style === 'bun')
+    {
+        orb(g, 16, roof + 4, 5, 4, hair, 1.4);
+        pr(g, 11, roof + 8, 10, 2, d1);        // the tie
+        pr(g, 12, roof + 8, 8, 1, d2);
+        pr(g, 6, hy + 3, 2, 4, hair);          // wisps at the temples
+        pr(g, 24, hy + 3, 2, 4, hair);
+    }
+    else if (style === 'curly')
+    {
+        orb(g, 5, hy + 2, 4, 4, hair, 1.2);
+        orb(g, 27, hy + 2, 4, 4, hair, 1.2);
+        orb(g, 7, hy - 3, 4, 3, hair, 1.4);
+        orb(g, 25, hy - 3, 4, 3, hair, 1.2);
+        orb(g, 11, roof + 3, 4, 3, hair, 1.4);
+        orb(g, 21, roof + 3, 4, 3, hair, 1.2);
+        orb(g, 16, roof + 3, 4, 3, hair, 1.4);   // +3 not +2: ry is 3, so +2 put the crown on row -1
+        orb(g, 6, hy + 8, 3, 3, hair, 1.1);
+        orb(g, 26, hy + 8, 3, 3, hair, 1.1);
+    }
+    else if (style === 'pony')
+    {
+        pr(g, 24, hy + 1, 6, 4, hair);         // the tail leaves the crown
+        pr(g, 26, hy + 4, 5, 12, hair);
+        pr(g, 27, hy + 14, 4, 3, d1);
+        pr(g, 26, hy + 5, 2, 7, l1);
+        pr(g, 23, hy - 1, 3, 4, d1);           // the tie
+        pr(g, 23, hy, 3, 1, d2);
+    }
+    else if (style === 'short')
+    {
+        // tapered at the temples, ears left clear
+        pr(g, lx - 1, hy + 3, 1, 2, d1);
+        pr(g, rx, hy + 3, 1, 2, d1);
+        pr(g, lx, hy - rise, 2, 2, l1);
     }
 }
 
@@ -20275,7 +20348,8 @@ function askName()
     picker('성별', 'form', [['a', '남자'], ['b', '여자']]);
     picker('피부', 'skin', ['#f6dcc0', '#f0c8a0', '#d8a878', '#a87850', '#7a4a2a']);
     picker('머리색', 'hair', ['#3a2a1a', '#8a5a2a', '#d8a838', '#c84838', '#8a5ad0', '#48b8d0', '#e8e8e8']);
-    picker('머리모양', 'hairStyle', HAIR_STYLES);
+    picker('머리모양', 'hairStyle', [['bowl', '단발'], ['short', '짧게'], ['spiky', '삐죽'],
+        ['bun', '올림'], ['curly', '곱슬'], ['pony', '포니'], ['wave', '웨이브'], ['long', '긴머리']]);
 
     m.body.appendChild(el('div', 'sectionTitle', '얼굴'));
     picker('얼굴형', 'face', [['round', '동글'], ['oval', '갸름'], ['soft', '통통']]);
