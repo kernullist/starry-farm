@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2.2';
+var GAME_VER = '4.2.3';
 
 // ---------- core constants ----------
 
@@ -8342,22 +8342,11 @@ function buildInterior(id)
     {
         var f = d.f[i];
         m.objects.push({ kind: 'furn', fk: f.k, x: f.x, y: f.y });
-        var fw = { bed: 2, table: 3, counter: 5, shelf: 3, kitchen: 3, tv: 2, chest: 1,
-            forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 2, plant: 1, painting: 2,
-            lamp: 1, stool: 1, crate: 1, books: 2, goods: 2,
-            window: 2, anvil: 1, bottles: 2, fireplace: 2, pedestal: 1, lumber: 1,
-            milkcan: 1, dartboard: 1, clock: 1, sawhorse: 1 }[f.k] || 1;
-        var fh = { bed: 3, table: 2, counter: 2, shelf: 2, kitchen: 2, tv: 2, chest: 1,
-            forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 1, plant: 1, painting: 1,
-            lamp: 1, stool: 1, crate: 1, books: 1, goods: 1,
-            window: 2, anvil: 1, bottles: 2, fireplace: 2, pedestal: 1, lumber: 1,
-            milkcan: 1, dartboard: 1, clock: 1, sawhorse: 1 }[f.k] || 1;
+        var fp = furnFootprint(f.k);
         // wall hangings and small props do not block movement
-        var passable = { chest: 1, calendar: 1, painting: 1, goods: 1,
-            window: 1, dartboard: 1, bottles: 1 };
-        if (!passable[f.k])
+        if (!FURN_PASSABLE[f.k])
         {
-            fillRect(m, f.x, f.y, fw, fh, T_WALL);
+            fillRect(m, f.x, f.y, fp.w, fp.h, T_WALL);
         }
     }
     // exit tile
@@ -8516,6 +8505,27 @@ function lampsLit()
     return (h >= 18.2 || h < 6.4);
 }
 
+// Furniture tile size. Must match buildInterior fillRect sizes so objAt,
+// collision, and use-button all agree on the same footprint.
+var FURN_W = { bed: 2, table: 3, counter: 5, shelf: 3, kitchen: 3, tv: 2, chest: 1,
+    forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 2, plant: 1, painting: 2,
+    lamp: 1, stool: 1, crate: 1, books: 2, goods: 2, mirror: 1,
+    window: 2, anvil: 1, bottles: 2, fireplace: 2, pedestal: 1, lumber: 1,
+    milkcan: 1, dartboard: 1, clock: 1, sawhorse: 1 };
+var FURN_H = { bed: 3, table: 2, counter: 2, shelf: 2, kitchen: 2, tv: 2, chest: 1,
+    forge: 2, hay: 2, barrel: 1, orb: 1, calendar: 1, plant: 1, painting: 1,
+    lamp: 1, stool: 1, crate: 1, books: 1, goods: 1, mirror: 1,
+    window: 2, anvil: 1, bottles: 2, fireplace: 2, pedestal: 1, lumber: 1,
+    milkcan: 1, dartboard: 1, clock: 1, sawhorse: 1 };
+// Wall hangings / counters that should not block feet (tile may still be wall).
+var FURN_PASSABLE = { chest: 1, calendar: 1, painting: 1, goods: 1,
+    window: 1, dartboard: 1, bottles: 1, mirror: 1 };
+
+function furnFootprint(fk)
+{
+    return { w: FURN_W[fk] || 1, h: FURN_H[fk] || 1 };
+}
+
 var OBJ_SOLID = { tree: 1, rock: 1, building: 1, bin: 1, furn: 1, board: 1, sign: 1,
     lamp: 1, bench: 1, planter: 1, barrel: 1, crate: 1,
     campfire: 1, net: 1, signpost: 1, driftwood: 1, buoy: 0, lumber: 1, sawhorse: 1,
@@ -8565,6 +8575,18 @@ function rebuildSolid(m)
         {
             w = o.tw;
             h = o.th;
+        }
+        if (o.kind === 'furn')
+        {
+            // passable props do not block; blocking ones already painted T_WALL
+            // in buildInterior, but keep mask in sync for dynamic furniture
+            if (FURN_PASSABLE[o.fk])
+            {
+                continue;
+            }
+            var fp = furnFootprint(o.fk);
+            w = fp.w;
+            h = fp.h;
         }
         for (j = 0; j < h; j++)
         {
@@ -8739,6 +8761,18 @@ function objAt(m, tx, ty)
         {
             w = o.tw;
             h = o.th;
+        }
+        // beds/tables/TVs are multi-tile; hit any footprint cell, not just origin
+        if (o.kind === 'furn')
+        {
+            var ffp = furnFootprint(o.fk);
+            w = ffp.w;
+            h = ffp.h;
+        }
+        if (o.kind === 'machine' || o.kind === 'chest')
+        {
+            w = 1;
+            h = 1;
         }
         if (tx >= o.x && tx < o.x + w && ty >= o.y && ty < o.y + h)
         {
@@ -23932,6 +23966,9 @@ var CV = null, G = null;
 var VIEW = { w: 320, h: 200, scale: 3, cssW: 0, cssH: 0 };
 var INPUT = { dx: 0, dy: 0, stickId: -1, sx: 0, sy: 0, tapTarget: null, toolHeld: false };
 var PLAYER = { frame: 0, ft: 0, moving: false, act: 0, actKind: '' };
+// Seconds of warp immunity after a map change. Stops door-bounce when the
+// player still holds a stick or a tap target that points at the old door.
+var WARP_IMMUNE = 0;
 var FX = [];
 var LAST = 0, ACC = 0;
 var WATER_FRAME = 0, WATER_T = 0;
@@ -24845,6 +24882,10 @@ function facingTile()
 
 function checkWarp()
 {
+    if (WARP_IMMUNE > 0)
+    {
+        return;
+    }
     var tx = Math.floor(S.px / TILE);
     var ty = Math.floor(S.py / TILE);
     var w = warpAt(MAP, tx, ty);
@@ -24865,6 +24906,11 @@ function checkWarp()
         return;
     }
     UI.warping = true;
+    // Drop pathfinding / stick residual so we do not walk straight back out
+    // (tap-to-move keeps outdoor door coords and marches onto the exit warp).
+    INPUT.tapTarget = null;
+    INPUT.dx = 0;
+    INPUT.dy = 0;
     var target = w;
     fadeOut(function ()
     {
@@ -24879,8 +24925,11 @@ function checkWarp()
             if (target.interior)
             {
                 var d = INTERIORS[target.to];
-                S.px = (d ? d.exit.x : 4) * TILE + HALF;
-                S.py = (d ? d.exit.y - 1 : 4) * TILE + HALF;
+                // spawn two tiles inside the door, not on the exit mat
+                var sx = d ? d.exit.x : 4;
+                var sy = d ? Math.max(2, d.exit.y - 2) : 4;
+                S.px = sx * TILE + HALF;
+                S.py = sy * TILE + HALF;
                 S.dir = 1;
             }
             else
@@ -24892,6 +24941,7 @@ function checkWarp()
         ensureStandable();
         rebuildActors();
         UI.lastHudKey = '';
+        WARP_IMMUNE = 0.55;
         setTimeout(function ()
         {
             UI.warping = false;
@@ -26065,7 +26115,13 @@ function interactObject(o)
     {
         if (o.fk === 'bed')
         {
-            askSleep();
+            // Only the player farmhouse bed starts the sleep flow
+            if (MAP.id === 'farmhouse')
+            {
+                askSleep();
+                return true;
+            }
+            toast('다른 사람 침대에는 누울 수 없어요.');
             return true;
         }
         if (o.fk === 'kitchen')
@@ -26101,6 +26157,41 @@ function interactObject(o)
         if (o.fk === 'forge')
         {
             openShop('clint');
+            return true;
+        }
+        if (o.fk === 'orb')
+        {
+            toast('수정구가 희미하게 빛나고 있어요...');
+            return true;
+        }
+        // Inspect-only props (NPC homes, decoration). Silent no-op felt broken.
+        var inspect = {
+            table: '테이블이 놓여 있어요.',
+            plant: '화분이 잘 가꿔져 있어요.',
+            painting: '그림이 걸려 있어요.',
+            lamp: '램프가 있어요.',
+            stool: '의자가 있어요.',
+            books: '책이 쌓여 있어요.',
+            crate: '상자가 있어요.',
+            barrel: '통이 있어요.',
+            window: '창밖으로 마을이 보여요.',
+            clock: '시계가 똑딱거려요.',
+            fireplace: '벽난로가 따뜻해 보여요.',
+            shelf: '선반에 물건이 놓여 있어요.',
+            goods: '진열된 물건들이에요.',
+            bottles: '병이 줄지어 있어요.',
+            dartboard: '다트판이에요.',
+            sawhorse: '작업대가 있어요.',
+            anvil: '모루가 묵직해요.',
+            lumber: '나무가 쌓여 있어요.',
+            milkcan: '우유통이에요.',
+            hay: '건초 더미예요.',
+            pedestal: '받침대가 있어요.',
+            counter: '카운터예요.'
+        };
+        if (inspect[o.fk])
+        {
+            toast(inspect[o.fk]);
             return true;
         }
     }
@@ -26921,6 +27012,11 @@ function loop(ts)
     }
 
     var busy = UI.modal || UI.dialogue || UI.warping;
+
+    if (WARP_IMMUNE > 0)
+    {
+        WARP_IMMUNE = Math.max(0, WARP_IMMUNE - dt);
+    }
 
     if (!busy)
     {
