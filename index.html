@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2.1';
+var GAME_VER = '4.2.2';
 
 // ---------- core constants ----------
 
@@ -14758,10 +14758,139 @@ function giveGift(npcId, slotIdx)
 
 // ---------- dialogue ----------
 
+// Absolute day index so "talked today" does not collide across seasons/years.
+function talkDayKey()
+{
+    return ((S.year - 1) * 4 + S.season) * 28 + S.day;
+}
+
+function hasTalkedToday(n)
+{
+    if (!n)
+    {
+        return false;
+    }
+    var key = talkDayKey();
+    if (n.talkedKey !== undefined && n.talkedKey !== null)
+    {
+        return n.talkedKey === key;
+    }
+    // legacy saves only stored day-of-month
+    return n.talkedDay === S.day;
+}
+
+function markTalkedToday(n)
+{
+    n.talkedKey = talkDayKey();
+    n.talkedDay = S.day;
+}
+
+// Pool of lines for this villager at the current heart level.
+function npcLinePool(d, h)
+{
+    var pool = (d.lines && d.lines.length) ? d.lines.slice() : [];
+    if (h >= 8 && d.lines8 && d.lines8.length)
+    {
+        pool = d.lines8.concat(pool);
+    }
+    else if (h >= 4 && d.lines4 && d.lines4.length)
+    {
+        pool = d.lines4.concat(pool);
+    }
+    if (d.bye && d.bye.length)
+    {
+        pool = pool.concat(d.bye);
+    }
+    return pool;
+}
+
+function pickNpcLine(d, h)
+{
+    var pool = npcLinePool(d, h);
+    if (!pool.length)
+    {
+        return '...';
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// First-meet lines: unique voice per person. Fallback builds name + signature.
+var NPC_INTRO = {
+    abigail: '오, 새로 온 농부구나. 난 애비게일.\n광산이랑 모험 이야기 좋아해. 너도?',
+    alex: '헤이! 난 알렉스야. 운동하는 거 보여?\n언젠가 프로 선수가 될 거라고.',
+    elliott: '처음 뵙겠습니다. 엘리엇이라고 합니다.\n바닷가에서 소설을 쓰고 있지요.',
+    emily: '안녕! 나는 에밀리야.\n오늘 네 기운… 되게 따뜻하다. 잘 지내게 될 것 같아!',
+    haley: '어… 안녕. 헤일리야.\n사진 찍기 좋은 날씨네. 너는 농부라며?',
+    harvey: '안녕하세요. 하비 의사입니다.\n건강 관리, 무리하지 마세요. 병원은 언제든 열려 있어요.',
+    leah: '안녕, 난 리아. 숲에서 조각 작업을 해.\n자연에서 나온 재료가 제일 좋더라고.',
+    maru: '안녕하세요! 마루예요.\n발명품 만드는 중이에요. 이번엔… 아마 안 터질 거예요.',
+    penny: '안녕하세요. 저는 페니예요.\n아이들에게 글을 가르치고 있어요. 잘 부탁드려요.',
+    sam: '요! 샘이야. 밴드 연습 중!\n피자 좋아하면 우린 벌써 친구야.',
+    sebastian: '…안녕. 세바스찬.\n시끄러운 덴 질색이니까, 조용히만 해.',
+    shane: '…뭘 봐. 셰인이야.\n일 끝나면 맥주. 그게 다야. 볼일 없으면 가.',
+    pierre: '어서 오세요! 피에르 잡화점입니다.\n씨앗 좋은 게 들어왔어요. 지역 상점 많이 이용해 주세요!',
+    caroline: '안녕하세요, 카롤라인이에요.\n애비게일 엄마죠. 차 한 잔 하실래요?',
+    clint: '클린트다. 대장간이지.\n도구 업그레이드? 광석이랑 돈만 가져와.',
+    gus: '스타드롭 살롱에 오신 걸 환영합니다! 거스예요.\n배고프면 언제든 오세요.',
+    robin: '로빈입니다, 목수예요.\n건물 필요하면 나무만 넉넉히 가져와 주세요!',
+    demetrius: '데메트리우스입니다. 과학자죠.\n이 계곡 생태계, 연구할 게 정말 많아요.',
+    marnie: '마니예요! 목장 운영해요.\n동물 키우려면 먼저 축사부터 지어야 한답니다.',
+    lewis: '펠리컨 마을 촌장 루이스일세.\n출하 상자에 넣어두면 밤에 정산된다네. 잘 지내게!',
+    willy: '윌리라 하네. 바다 사람이라네.\n낚싯대 필요하면 말하게. 바다는 늘 새롭지.',
+    evelyn: '어머, 새 농부 분이시구나. 에블린이에요.\n우리 알렉스 잘 부탁해요. 쿠키 드릴까요?',
+    george: '…흠. 조지다.\n요즘 젊은 것들은 인사도 없더군. 너는 다르길 바라네.',
+    jodi: '조디예요. 샘이랑 빈센트 엄마죠.\n남편이 군대에 가서… 늘 바쁘게 지내고 있어요.',
+    gunther: '건터입니다. 박물관을 맡고 있어요.\n유물이나 광물 기증해 주시면 큰 도움이 됩니다.',
+    marlon: '마를론이네. 모험가 길드지.\n광산은 위험하니 무기 없이 내려가지 말게.',
+    linus: '리누스라 하네. 텐트에서 지내지.\n자연이 주는 것만으로도 충분하다네.',
+    wizard: '…너의 기운이 느껴진다. 나는 이 탑의 마법사.\n커뮤니티 센터의 정령들을… 보았느냐?',
+    sandy: '사막까지 오셨네요! 샌디예요.\n여기선 선인장이 잘 자라요. 천천히 둘러보세요.',
+    morris: '조자마트에 오신 걸 환영합니다. 모리스입니다.\n효율이 최고의 가치죠.',
+    mrqi: '…미스터 치다.\n치 코인을 모아 보거라. 운도 실력의 일부지.',
+    islander: '섬에 온 거야? 난 레오!\n황금 호두를 모아 봐. 비밀이 열려.'
+};
+
+function firstMeetLine(d)
+{
+    if (d.intro)
+    {
+        return d.intro;
+    }
+    if (NPC_INTRO[d.id])
+    {
+        return NPC_INTRO[d.id];
+    }
+    // late / unknown villager: still unique via their own line pool
+    var sig = pickNpcLine(d, 0);
+    return '나는 ' + d.name + '이야.\n' + sig;
+}
+
+function spouseLine(d)
+{
+    if (d.spouseLines && d.spouseLines.length)
+    {
+        return d.spouseLines[Math.floor(Math.random() * d.spouseLines.length)];
+    }
+    return pickNpcLine(d, 10);
+}
+
+function birthdayLine(d)
+{
+    if (d.bdayLine)
+    {
+        return d.bdayLine;
+    }
+    return '오늘 내 생일이야! 선물 주면 정말 기쁠 텐데...\n' + pickNpcLine(d, hearts(d.id));
+}
+
 function talkTo(actor)
 {
     var d = NPC_BY_ID[actor.id];
     var n = S.npc[actor.id];
+    if (!d || !n)
+    {
+        return;
+    }
     // specialty vendors open their service UI
     if (actor.id === 'morris' && typeof openJoja === 'function')
     {
@@ -14782,9 +14911,9 @@ function talkTo(actor)
     {
         // the festival line replaces the day's chat but still counts as saying
         // hello, so a festival is a good day to make friends
-        if (n.talkedDay !== S.day)
+        if (!hasTalkedToday(n))
         {
-            n.talkedDay = S.day;
+            markTalkedToday(n);
             addFriend(actor.id, 20);
         }
         showDialogue(d, fline);
@@ -14794,38 +14923,32 @@ function talkTo(actor)
     {
         n.met = true;
         S.seenNpc[actor.id] = true;
-        showDialogue(d, '안녕! 네가 새로 온 농부구나. 나는 ' + d.name + '이야.\n앞으로 잘 지내보자!');
+        markTalkedToday(n);
         addFriend(actor.id, 20);
+        showDialogue(d, firstMeetLine(d));
         return;
     }
-    if (n.talkedDay === S.day)
+    // already said hello today: still their own voice, no shared 3-line pool
+    if (hasTalkedToday(n))
     {
-        var idle = ['오늘도 좋은 하루 보내!', '또 보네!', '나중에 봐.'];
-        showDialogue(d, idle[Math.floor(Math.random() * idle.length)]);
+        showDialogue(d, pickNpcLine(d, hearts(actor.id)));
         return;
     }
-    n.talkedDay = S.day;
+    markTalkedToday(n);
     addFriend(actor.id, 20);
 
-    var h = hearts(actor.id);
-    var pool = d.lines;
-    if (h >= 8 && d.lines8)
-    {
-        pool = d.lines8.concat(d.lines);
-    }
-    else if (h >= 4 && d.lines4)
-    {
-        pool = d.lines4.concat(d.lines);
-    }
-    var line = pool[Math.floor(Math.random() * pool.length)];
+    var line;
     if (isBirthday(actor.id))
     {
-        line = '오늘 내 생일이야! 선물 주면 정말 기쁠 텐데...';
+        line = birthdayLine(d);
     }
     else if (S.spouse === actor.id)
     {
-        var sp = ['오늘도 농장 일 힘내!', '집에 일찍 와.', '당신이랑 사는 게 참 좋아.'];
-        line = sp[Math.floor(Math.random() * sp.length)];
+        line = spouseLine(d);
+    }
+    else
+    {
+        line = pickNpcLine(d, hearts(actor.id));
     }
     showDialogue(d, line);
 }
