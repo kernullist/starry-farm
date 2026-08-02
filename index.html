@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.1';
+var GAME_VER = '4.2';
 
 // ---------- core constants ----------
 
@@ -10952,7 +10952,9 @@ function endDay(fainted, lostGold)
     S.luck = Math.random() * 2 - 1;
     BUFF.list = null;
 
-    // 4) world tick
+    // 4) world tick — pull every map that holds machines/crops into the cache
+    // so overnight progress is not skipped for unvisited maps after a load.
+    ensureMapsForDayTick();
     growCrops();
     growFruitTrees();
     tickCrabPots();
@@ -11684,33 +11686,115 @@ function tickAnimals()
 
 // ---------- save / load ----------
 
+// Object kinds rebuilt from the map definition (or re-synced daily). Everything
+// else on a live map (machines, fishponds, walnuts, ...) is persisted.
+function mapObjIsStatic(o)
+{
+    if (!o)
+    {
+        return true;
+    }
+    // definition furniture / buildings / fixtures
+    if (o.kind === 'building' || o.kind === 'furn' || o.kind === 'sign' ||
+        o.kind === 'board' || o.kind === 'fountain' || o.kind === 'mine_entrance' ||
+        o.kind === 'bin' || o.kind === 'animalbuilding' || o.kind === 'soboard' ||
+        o.kind === 'boat' || o.kind === 'volcano_entrance' || o.kind === 'skull_entrance' ||
+        o.kind === 'minecart')
+    {
+        return true;
+    }
+    // daily / conditional spawns - recreated by gapOnNewDay
+    if (o.kind === 'cart' || o.kind === 'nmstall')
+    {
+        return true;
+    }
+    return false;
+}
+
 function serializeMaps()
 {
     var out = {};
-    var mid;
+    var mid, i;
+    // Keep objects for maps that are not currently in the cache. Without this,
+    // saving while standing in the farmhouse after a load wiped island/farm
+    // machines because only MAP_CACHE keys were written back to S.mapObjs.
+    if (S && S.mapObjs)
+    {
+        for (mid in S.mapObjs)
+        {
+            if (S.mapObjs.hasOwnProperty(mid) && mid !== 'mine')
+            {
+                out[mid] = S.mapObjs[mid];
+            }
+        }
+    }
     for (mid in MAP_CACHE)
     {
-        if (!MAP_CACHE.hasOwnProperty(mid))
+        if (!MAP_CACHE.hasOwnProperty(mid) || mid === 'mine')
         {
             continue;
         }
         var m = MAP_CACHE[mid];
         var keep = [];
-        var i;
         for (i = 0; i < m.objects.length; i++)
         {
             var o = m.objects[i];
-            if (o.kind === 'building' || o.kind === 'furn' || o.kind === 'sign' ||
-                o.kind === 'board' || o.kind === 'fountain' || o.kind === 'mine_entrance' ||
-                o.kind === 'bin' || o.kind === 'animalbuilding')
+            if (mapObjIsStatic(o))
             {
-                continue;   // rebuilt from the map definition
+                continue;
             }
             keep.push(o);
         }
         out[mid] = keep;
     }
     return out;
+}
+
+// Load every map that may hold progressing objects before overnight ticks.
+function ensureMapsForDayTick()
+{
+    var need = {}, mid, k;
+    need.farm = 1;
+    need.greenhouse = 1;
+    need.island_west = 1;
+    need.farm_cave = 1;
+    if (S.mapObjs)
+    {
+        for (mid in S.mapObjs)
+        {
+            if (S.mapObjs.hasOwnProperty(mid) && mid !== 'mine')
+            {
+                need[mid] = 1;
+            }
+        }
+    }
+    if (S.soil)
+    {
+        for (k in S.soil)
+        {
+            if (S.soil.hasOwnProperty(k))
+            {
+                need[k] = 1;
+            }
+        }
+    }
+    if (S.crops)
+    {
+        for (k in S.crops)
+        {
+            if (S.crops.hasOwnProperty(k))
+            {
+                need[k] = 1;
+            }
+        }
+    }
+    for (mid in need)
+    {
+        if (need.hasOwnProperty(mid) && (MAPS[mid] || INTERIORS[mid]))
+        {
+            loadMap(mid);
+        }
+    }
 }
 
 function loadMap(id)
@@ -11723,20 +11807,28 @@ function loadMap(id)
     m = buildMap(id);
     if (S && S.mapObjs && S.mapObjs[id])
     {
-        // drop the procedural scatter and use the saved object list
+        // keep definition fixtures, then reattach saved dynamic objects
         var keep = [];
         var i;
         for (i = 0; i < m.objects.length; i++)
         {
             var o = m.objects[i];
-            if (o.kind === 'building' || o.kind === 'furn' || o.kind === 'sign' ||
-                o.kind === 'board' || o.kind === 'fountain' || o.kind === 'mine_entrance' ||
-                o.kind === 'bin')
+            if (mapObjIsStatic(o) && o.kind !== 'cart' && o.kind !== 'nmstall')
             {
                 keep.push(o);
             }
         }
-        m.objects = keep.concat(JSON.parse(JSON.stringify(S.mapObjs[id])));
+        var saved = JSON.parse(JSON.stringify(S.mapObjs[id]));
+        var dyn = [];
+        for (i = 0; i < saved.length; i++)
+        {
+            // drop stale static copies from older saves to avoid duplicates
+            if (!mapObjIsStatic(saved[i]))
+            {
+                dyn.push(saved[i]);
+            }
+        }
+        m.objects = keep.concat(dyn);
         rebuildSolid(m);
     }
     if (id === 'farm')
@@ -11811,6 +11903,7 @@ function loadGame()
         }
         S = migrateSave(data);
         MAP_CACHE = {};
+        // load map after migrate; lateOnLoad may rewrite S.map (e.g. mine -> farmhouse)
         MAP = loadMap(S.map);
         if (typeof gapOnLoad === 'function')
         {
@@ -11819,6 +11912,11 @@ function loadGame()
         if (typeof lateOnLoad === 'function')
         {
             lateOnLoad();
+        }
+        // lateOnLoad may have changed S.map — ensure MAP matches
+        if (!MAP || MAP.id !== S.map)
+        {
+            MAP = loadMap(S.map);
         }
         ok = true;
     }
@@ -12027,6 +12125,10 @@ function applySaveCode(code)
         if (typeof lateOnLoad === 'function')
         {
             lateOnLoad();
+        }
+        if (!MAP || MAP.id !== S.map)
+        {
+            MAP = loadMap(S.map);
         }
         saveGame(true);
         ok = true;
@@ -18134,7 +18236,7 @@ function lateOnLoad()
             S.stats.movies = 0;
         }
     }
-    // if a save was mid-dungeon, force farmhouse (mine cache is not durable)
+    // if a save was mid-dungeon, force farmhouse (mine floors are not durable)
     if (S.map === 'mine')
     {
         S.map = 'farmhouse';
@@ -18145,6 +18247,13 @@ function lateOnLoad()
             MINE.mobs = [];
             MINE.skull = false;
             MINE.volcano = false;
+            MINE.swing = 0;
+        }
+        delete MAP_CACHE.mine;
+        // applySaveCode path never calls startPlay — must swap MAP here too
+        if (typeof loadMap === 'function')
+        {
+            MAP = loadMap('farmhouse');
         }
     }
 }
@@ -22820,8 +22929,17 @@ function askSaveCode()
         if (applySaveCode(ta.value))
         {
             closeModal();
-            hideTitle();
-            rebuildActors();
+            // full play bootstrap (map reload after lateOnLoad mine->farmhouse, horse, HUD)
+            if (typeof startPlay === 'function')
+            {
+                startPlay();
+            }
+            else
+            {
+                hideTitle();
+                MAP = loadMap(S.map);
+                rebuildActors();
+            }
             UI.lastHudKey = '';
             toast('불러왔어요!');
         }
