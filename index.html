@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.9';
+var GAME_VER = '4.1';
 
 // ---------- core constants ----------
 
@@ -8455,7 +8455,8 @@ var OBJ_SOLID = { tree: 1, rock: 1, building: 1, bin: 1, furn: 1, board: 1, sign
     machine: 1, chest: 1, bush: 1, stump: 1, mine_entrance: 1, fountain: 1,
     animalbuilding: 1, fruittree: 1, cactus: 1, scarecrow: 0, crop: 0, weed: 0, grass: 0,
     branch: 0, forage: 0, flowerdeco: 0, drop: 0, sprinkler: 0, crabpot: 0,
-    artifactspot: 0, pet: 0, horse: 0, skull_entrance: 0, minecart: 0, rug: 0 };
+    artifactspot: 0, pet: 0, horse: 0, skull_entrance: 0, minecart: 0, rug: 0,
+    cart: 1, soboard: 1, nmstall: 1 };
 
 function rebuildSolid(m)
 {
@@ -9410,6 +9411,14 @@ function drawObject(g, o, cam, season, tick)
             g.drawImage(itemIcon(o.mk || 'sprinkler', 28), x + 2, y + 4);
             break;
         default:
+            if (typeof gapDrawObject === 'function' && gapDrawObject(g, o, x, y, tick))
+            {
+                break;
+            }
+            if (typeof lateDrawObject === 'function' && lateDrawObject(g, o, x, y, tick))
+            {
+                break;
+            }
             break;
     }
 }
@@ -10166,6 +10175,8 @@ function newGame(name, farmName)
         museum: {},
         mineDeep: 0, mineFloor: 0, skullDeep: 0, skullFloor: 0,
         goalIdx: 0, goalTarget: 0, requests: [],
+        specialOrders: [], guildKill: {}, houseLevel: 0,
+        qiCoins: 0, walnuts: 0, volcanoDeep: 0,
         pet: null, petPet: false, horse: false, riding: false,
         children: 0,
         harvestedKinds: {}, artifactsFound: {},
@@ -10952,6 +10963,14 @@ function endDay(fainted, lostGold)
     resetGifts();
     tickQuests();
     tickPetAndSpouse();
+    if (typeof gapOnNewDay === 'function')
+    {
+        gapOnNewDay();
+    }
+    if (typeof lateOnNewDay === 'function')
+    {
+        lateOnNewDay();
+    }
 
     // 5) restore the farmer
     var restore = fainted ? .5 : (S.time <= DAY_START ? 1 : 1);
@@ -10963,6 +10982,16 @@ function endDay(fainted, lostGold)
     S.py = 9 * TILE + HALF;
     S.dir = 0;
     UI.collapsing = false;
+    // leave dungeon combat state so the next day does not keep stale mobs
+    if (typeof MINE !== 'undefined' && MINE)
+    {
+        MINE.mobs = [];
+        MINE.skull = false;
+        MINE.volcano = false;
+        MINE.swing = 0;
+        delete MAP_CACHE.mine;
+    }
+    S.riding = false;
 
     MAP = loadMap('farmhouse');
     saveGame();
@@ -11446,6 +11475,10 @@ function machineInsert(o, slotIdx)
     {
         return false;
     }
+    if (typeof gapMachineInsert === 'function' && (o.mk === 'crystalarium' || o.mk === 'cask'))
+    {
+        return gapMachineInsert(o, slotIdx);
+    }
     var def = MACHINES[o.mk];
     if (!def)
     {
@@ -11779,6 +11812,14 @@ function loadGame()
         S = migrateSave(data);
         MAP_CACHE = {};
         MAP = loadMap(S.map);
+        if (typeof gapOnLoad === 'function')
+        {
+            gapOnLoad();
+        }
+        if (typeof lateOnLoad === 'function')
+        {
+            lateOnLoad();
+        }
         ok = true;
     }
     while (false);
@@ -11876,6 +11917,28 @@ function migrateSave(d)
     def('seenNpc', {});
     def('farmName', '별밤');
     def('name', '농부');
+    def('houseLevel', 0);
+    def('specialOrders', []);
+    def('guildKill', {});
+    def('qiCoins', 0);
+    def('walnuts', 0);
+    def('volcanoDeep', 0);
+    if (d.flags && d.flags.walnutsTaken === undefined)
+    {
+        d.flags.walnutsTaken = {};
+    }
+    if (d.stats && d.stats.specialDone === undefined)
+    {
+        d.stats.specialDone = 0;
+    }
+    if (d.stats && d.stats.casinoPlays === undefined)
+    {
+        d.stats.casinoPlays = 0;
+    }
+    if (d.stats && d.stats.movies === undefined)
+    {
+        d.stats.movies = 0;
+    }
 
     // fill any bundle / npc keys added by a newer build
     var save = S;
@@ -11907,6 +11970,10 @@ function migrateSave(d)
     while (d.inv.length < d.invSize)
     {
         d.inv.push(null);
+    }
+    if (typeof defGapSave === 'function')
+    {
+        defGapSave(d);
     }
     return d;
 }
@@ -11953,6 +12020,14 @@ function applySaveCode(code)
         S = migrateSave(data);
         MAP_CACHE = {};
         MAP = loadMap(S.map);
+        if (typeof gapOnLoad === 'function')
+        {
+            gapOnLoad();
+        }
+        if (typeof lateOnLoad === 'function')
+        {
+            lateOnLoad();
+        }
         saveGame(true);
         ok = true;
     }
@@ -12252,8 +12327,21 @@ function checkCenterComplete()
         return;
     }
     S.flags.centerDone = true;
-    give('stardrop', 1);
-    modalMsg('🌟 커뮤니티 센터 복구 완료!', '별빛 정령들이 마을을 되살렸어요.\n계곡 전체가 다시 활기를 되찾았습니다.\n\n정말 잘했어요!\n(스타드롭을 받았습니다)');
+    S.flags.theater = true;
+    if (typeof ensureTheaterBuilding === 'function')
+    {
+        ensureTheaterBuilding();
+        S.flags.theaterBuilt = true;
+    }
+    if (typeof giveStardropOnce === 'function')
+    {
+        giveStardropOnce('center');
+    }
+    else
+    {
+        give('stardrop', 1);
+    }
+    modalMsg('🌟 커뮤니티 센터 복구 완료!', '별빛 정령들이 마을을 되살렸어요.\n계곡 전체가 다시 활기를 되찾았습니다.\n\n영화관이 문을 열었어요!\n(스타드롭을 받았습니다)');
 }
 
 // ---------- misc queries ----------
@@ -12963,6 +13051,7 @@ function drawFishingBar()
 var MINE = {
     floor: 0,
     skull: false,      // skull cavern reuses the same generator with harder tables
+    volcano: false,    // volcano dungeon (island) - late.js
     mobs: [],
     swing: 0,          // frames left in a sword swing
     swingDir: 0,
@@ -12977,8 +13066,10 @@ var MINE_W = 34, MINE_H = 26;
 function genMineFloor(floor)
 {
     var m = {
-        id: 'mine', name: (MINE.skull ? '해골 동굴 ' : '광산 ') + floor + '층', w: MINE_W, h: MINE_H, outdoor: false,
+        id: 'mine', name: (MINE.volcano ? '화산 ' : (MINE.skull ? '해골 동굴 ' : '광산 ')) + floor + '층',
+        w: MINE_W, h: MINE_H, outdoor: false,
         fish: 'mine', floor: MINE.skull ? 100 + (floor % 20) : floor, skullFloor: MINE.skull ? floor : 0,
+        volcano: !!MINE.volcano,
         tiles: new Uint8Array(MINE_W * MINE_H),
         objects: [], warps: [], till: []
     };
@@ -13049,7 +13140,7 @@ function genMineFloor(floor)
     fillRect(m, m.entry.x - 1, m.entry.y - 1, 3, 3, T_CAVE);
     m.objects.push({ kind: 'mine_up', x: m.entry.x, y: m.entry.y });
 
-    // elevator on every 5th floor
+    // elevator on every 5th floor (all dungeon types; openElevator branches by mode)
     if (floor % 5 === 0 && floor > 0)
     {
         m.objects.push({ kind: 'elevator', x: m.entry.x + 2, y: m.entry.y });
@@ -13161,6 +13252,10 @@ function genMineFloor(floor)
 
 function mineOreTable(floor)
 {
+    if (MINE.volcano)
+    {
+        return [['stone', 30], ['coal', 12], ['gold', 14], ['gem', 10], ['iridium', 12]];
+    }
     if (MINE.skull)
     {
         var sk = [['stone', 34], ['coal', 8], ['iron', 12], ['gold', 20], ['gem', 10], ['iridium', 16]];
@@ -13210,11 +13305,24 @@ function pickWeighted(table)
     return table[0][0];
 }
 
+// skull/volcano-only ids must not leak into the regular mine floor table
+var SKULL_ONLY_MOBS = {
+    mummy: 1, pepper_rex: 1, iridium_slime: 1, serpent: 1
+};
+var VOLCANO_ONLY_MOBS = {
+    magma_sprite: 1, dwarvish_sentry: 1, false_magma: 1
+};
+
 function mineMobPool(floor)
 {
+    if (MINE.volcano)
+    {
+        var vp = ['magma_sprite', 'dwarvish_sentry', 'false_magma', 'slime_red', 'shadow'];
+        return vp;
+    }
     if (MINE.skull)
     {
-        var sp = ['mummy', 'iridium_slime', 'serpent', 'shadow'];
+        var sp = ['mummy', 'iridium_slime', 'serpent', 'shadow', 'bat', 'slime_red'];
         if (floor >= 20)
         {
             sp.push('pepper_rex');
@@ -13226,6 +13334,10 @@ function mineMobPool(floor)
     for (k in MONSTERS)
     {
         if (!MONSTERS.hasOwnProperty(k))
+        {
+            continue;
+        }
+        if (SKULL_ONLY_MOBS[k] || VOLCANO_ONLY_MOBS[k])
         {
             continue;
         }
@@ -13247,6 +13359,7 @@ function mineMobPool(floor)
 function enterSkull(floor)
 {
     MINE.skull = true;
+    MINE.volcano = false;
     MINE.floor = floor;
     var m = genMineFloor(floor);
     MAP_CACHE.mine = m;
@@ -13277,6 +13390,7 @@ function leaveSkull()
 function enterMine(floor)
 {
     MINE.skull = false;
+    MINE.volcano = false;
     MINE.floor = floor;
     var m = genMineFloor(floor);
     MAP_CACHE.mine = m;
@@ -13305,6 +13419,7 @@ function enterMine(floor)
 function leaveMine()
 {
     MINE.mobs = [];
+    MINE.volcano = false;
     delete MAP_CACHE.mine;
     MAP = loadMap('mountain');
     S.map = 'mountain';
@@ -13316,7 +13431,20 @@ function mineDescend()
 {
     fadeOut(function ()
     {
-        if (MINE.skull)
+        if (MINE.volcano)
+        {
+            if (MINE.floor >= 10)
+            {
+                toast('화산 정상입니다. 더 내려갈 수 없어요.');
+                enterVolcano(10);
+            }
+            else
+            {
+                enterVolcano(MINE.floor + 1);
+                addXp('mining', 8);
+            }
+        }
+        else if (MINE.skull)
         {
             enterSkull(MINE.floor + 1);
             addXp('mining', 6);
@@ -13336,7 +13464,11 @@ function mineAscend()
     {
         fadeOut(function ()
         {
-            if (MINE.skull)
+            if (MINE.volcano && typeof leaveVolcano === 'function')
+            {
+                leaveVolcano();
+            }
+            else if (MINE.skull)
             {
                 leaveSkull();
             }
@@ -13349,7 +13481,11 @@ function mineAscend()
     }
     fadeOut(function ()
     {
-        if (MINE.skull)
+        if (MINE.volcano && typeof enterVolcano === 'function')
+        {
+            enterVolcano(MINE.floor - 1);
+        }
+        else if (MINE.skull)
         {
             enterSkull(MINE.floor - 1);
         }
@@ -13440,7 +13576,19 @@ function killMob(mob)
     var def = MONSTERS[mob.kind];
     addXp('combat', def.xp);
     S.stats.monstersKilled++;
+    if (typeof noteGuildKill === 'function')
+    {
+        noteGuildKill(mob.kind);
+    }
     checkGoal();
+    if ((S.mineDeep || 0) >= 120 && typeof giveStardropOnce === 'function')
+    {
+        // deepest floor first visit
+        if (MINE && !MINE.skull && MINE.floor >= 120)
+        {
+            giveStardropOnce('mine120');
+        }
+    }
     var tx = Math.floor(mob.x / TILE), ty = Math.floor(mob.y / TILE);
     var i;
     for (i = 0; i < def.drops.length; i++)
@@ -13696,12 +13844,20 @@ function rockLoot(o)
     else
     {
         var oreId = { copper: 'copper_ore', iron: 'iron_ore', gold: 'gold_ore', iridium: 'iridium_ore' }[o.rk];
+        if (!oreId)
+        {
+            oreId = 'stone';
+        }
         n = 1 + bonus + (Math.random() < lvl * .04 ? 1 : 0);
         for (i = 0; i < n; i++)
         {
             spawnDrop(MAP, tx, ty, oreId, 0);
         }
-        if (Math.random() < .1)
+        if (MINE.volcano && Math.random() < .2)
+        {
+            spawnDrop(MAP, tx, ty, 'cinder_shard', 0);
+        }
+        else if (Math.random() < .1)
         {
             spawnDrop(MAP, tx, ty, 'geode', 0);
         }
@@ -13792,7 +13948,7 @@ function drawMineHud(g)
     var el = document.getElementById('weatherChip');
     if (el)
     {
-        el.textContent = (MINE.skull ? '💀 ' : '⛏ ') + MINE.floor + '층' +
+        el.textContent = (MINE.volcano ? '🌋 ' : (MINE.skull ? '💀 ' : '⛏ ')) + MINE.floor + '층' +
             (MINE.ladderFound ? '  · 사다리 발견!' : '');
     }
 }
@@ -14219,11 +14375,30 @@ function checkHeartEvent(id, h)
         return;
     }
     n.events[h] = true;
-    var lines = { 2: d.lines, 4: d.lines4 || d.lines, 6: d.lines4 || d.lines, 8: d.lines8 || d.lines, 10: d.lines8 || d.lines }[h];
-    var msg = lines[Math.floor(Math.random() * lines.length)];
+    var msg = null;
+    if (typeof HEART_EVENTS !== 'undefined' && HEART_EVENTS[id] && HEART_EVENTS[id][h])
+    {
+        msg = HEART_EVENTS[id][h];
+    }
+    else
+    {
+        var lines = { 2: d.lines, 4: d.lines4 || d.lines, 6: d.lines4 || d.lines, 8: d.lines8 || d.lines, 10: d.lines8 || d.lines }[h];
+        msg = lines[Math.floor(Math.random() * lines.length)];
+    }
+    var reward = '';
+    if (h === 8)
+    {
+        S.gold += 200;
+        reward = '\n\n(+200G)';
+    }
+    if (h === 10)
+    {
+        give('pink_cake', 1);
+        reward = '\n\n(분홍 케이크를 받았어요)';
+    }
     setTimeout(function ()
     {
-        modalMsg('💗 ' + d.name + ' ' + h + '하트', msg);
+        modalMsg('💗 ' + d.name + ' ' + h + '하트', msg + reward);
     }, 400);
 }
 
@@ -14383,6 +14558,17 @@ function talkTo(actor)
 {
     var d = NPC_BY_ID[actor.id];
     var n = S.npc[actor.id];
+    // specialty vendors open their service UI
+    if (actor.id === 'morris' && typeof openJoja === 'function')
+    {
+        openJoja();
+        return;
+    }
+    if (actor.id === 'mrqi' && typeof openCasino === 'function')
+    {
+        openCasino();
+        return;
+    }
     if (festivalTalk(actor))
     {
         return;
@@ -15162,6 +15348,2859 @@ MONSTERS.pepper_rex = { name: '페퍼 렉스', hp: 300, dmg: 40, speed: .7, xp: 
     sprite: 'serpent', col: ['#5a7a3a', '#2a4a1a', '#8aaa6a'], drops: ['dinosaur_egg', 'bone_frag'] };
 MONSTERS.iridium_slime = { name: '이리듐 슬라임', hp: 220, dmg: 32, speed: .6, xp: 40, minFloor: 30, maxFloor: 999,
     sprite: 'slime', col: ['#c888e8', '#8848a8', '#e8b8f8'], drops: ['iridium_ore', 'slime'] };
+
+
+/* ===== gap.js ===== */
+
+// Starry Farm - content gap fill Wave 1~3 (docs/plan/2026-08-02-content-gap-fill.md).
+// Loads after content.js. All comments ASCII only.
+
+// ---------- items ----------
+
+I('backpack', '큰 가방', 'misc', 0, 'chest', ['#6a8a5a', '#3a5a2a', '#a8c898'],
+    { desc: '가방 칸을 늘려 준다. 사용하면 사라진다.' });
+I('backpack2', '특대 가방', 'misc', 0, 'chest', ['#5a6a8a', '#2a3a5a', '#98a8c8'],
+    { desc: '가방 칸을 최대까지 늘려 준다.' });
+I('sprinkler_ir', '이리듐 스프링클러', 'craft', 0, 'sprinkler', ['#c888e8', '#8848a8', '#7ab8e0']);
+I('crystalarium', '크리스탈라륨', 'craft', 0, 'machine_box', ['#78a0c8', '#385888', '#b8d8f8']);
+I('cask', '오크 통', 'craft', 0, 'machine_keg', ['#8a5a2a', '#5a3a10', '#c8a868']);
+I('spa_towel', '온천 수건', 'misc', 0, 'cloth', ['#e8f0f8', '#a8b0c0', '#ffffff'],
+    { desc: '온천에서 받은 기념 수건. 장식용.' });
+
+// gems allowed in crystalarium
+var CRYSTAL_GEMS = ['quartz', 'earth_crystal', 'frozen_tear', 'fire_quartz', 'amethyst',
+    'topaz', 'aquamarine', 'emerald', 'ruby', 'jade', 'diamond'];
+
+// cask-able artisan goods
+var CASK_ITEMS = ['wine', 'cheese', 'goat_cheese', 'pale_ale', 'beer', 'mead', 'juice'];
+
+MACHINES.crystalarium = {
+    name: '크리스탈라륨', hours: 120,
+    rules: [{ from: 'quartz', to: 'quartz', hours: 120 }]
+};
+MACHINES.cask = {
+    name: '오크 통', hours: 56,
+    rules: [{ from: 'wine', to: 'wine', hours: 56, quality: 1 }]
+};
+
+CRAFTING.push(
+    { id: 'sprinkler_ir', need: { gold_bar: 1, iridium_bar: 1, battery_pack: 1 }, lvl: { farming: 9 } },
+    { id: 'crystalarium', need: { stone: 99, gold_bar: 5, iridium_bar: 2, battery_pack: 1 },
+        lvl: { mining: 9 }, machine: true },
+    { id: 'cask', need: { wood: 20, hardwood: 1 }, lvl: { farming: 8 }, machine: true }
+);
+
+// shop stock: backpacks + rare seeds on pierre year 2
+SHOPS.pierre.stock.push(
+    { id: 'backpack', price: 2000 },
+    { id: 'backpack2', price: 10000, year: 2 }
+);
+
+// ---------- traveling cart ----------
+
+var CART_POOL = [
+    { id: 'rare_seed', price: 1000 }, { id: 'ancient_seed_artifact', price: 400 },
+    { id: 'coffee', price: 300 }, { id: 'pink_cake', price: 900 },
+    { id: 'furniture_hint', price: 250 }, { id: 'diamond', price: 2000 },
+    { id: 'strawberry_seeds', price: 200 }, { id: 'starfruit_seeds', price: 800 },
+    { id: 'battery_pack', price: 1200 }, { id: 'iridium_ore', price: 400 },
+    { id: 'duck_feather', price: 500 }, { id: 'rabbit_foot', price: 1500 },
+    { id: 'truffle', price: 1200 }, { id: 'mega_bomb', price: 800 },
+    { id: 'warp_totem', price: 350 }, { id: 'hat_fedora', price: 3500 },
+    { id: 'spice_berry', price: 150 }, { id: 'sweet_pea', price: 100 },
+    { id: 'cactus_seeds', price: 200 }, { id: 'fairy_seeds', price: 400 }
+];
+
+// rare seed grows ancient fruit (if missing)
+if (!ITEMS.rare_seed)
+{
+    I('rare_seed', '희귀 씨앗', 'seed', 200, 'seed', ['#68a878', '#286848'], { buy: 1000 });
+}
+if (!CROPS.rare_seed)
+{
+    CROPS.rare_seed = { crop: 'ancient_fruit', season: 'spring,summer,fall,winter', form: 'stalk',
+        days: 28, regrow: 7, yield: 1 };
+    CROP_TO_SEED.ancient_fruit = 'rare_seed';
+}
+if (!ITEMS.furniture_hint)
+{
+    I('furniture_hint', '장식 상자', 'craft', 50, 'chest', ['#c8a878', '#886838', '#e8d0a8'],
+        { desc: '집안을 꾸미는 데 쓰는 작은 상자. (장식용)' });
+}
+if (!ITEMS.rabbit_foot)
+{
+    I('rabbit_foot', '토끼 발', 'animal', 565, 'bone', ['#f0e8d8', '#b0a898', '#d8d0c0']);
+}
+if (!ITEMS.truffle)
+{
+    I('truffle', '송로버섯', 'animal', 625, 'mushroom', ['#8a6a48', '#5a3a18', '#b89878']);
+}
+if (!ITEMS.sweet_pea)
+{
+    I('sweet_pea', '스위트피', 'forage', 50, 'flower', ['#e878c8', '#a83888', '#f8b8e8']);
+}
+
+function cartDay()
+{
+    // Friday=4, Sunday=6 when day 1 is Monday (day-1)%7
+    var d = dayOfWeek();
+    return d === 4 || d === 6;
+}
+
+function cartSeed()
+{
+    return S.year * 1000 + S.season * 100 + S.day;
+}
+
+function rollCartStock()
+{
+    var seed = cartSeed();
+    var rng = function ()
+    {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+    };
+    var pool = CART_POOL.slice();
+    var i, j, tmp;
+    for (i = pool.length - 1; i > 0; i--)
+    {
+        j = Math.floor(rng() * (i + 1));
+        tmp = pool[i];
+        pool[i] = pool[j];
+        pool[j] = tmp;
+    }
+    var n = 5 + Math.floor(rng() * 3);
+    var stock = [];
+    for (i = 0; i < n && i < pool.length; i++)
+    {
+        var p = pool[i];
+        if (!ITEMS[p.id])
+        {
+            continue;
+        }
+        stock.push({ id: p.id, price: p.price || Math.max(50, (ITEMS[p.id].price || 50) * 4) });
+    }
+    return stock;
+}
+
+function syncTravelingCart()
+{
+    var forest = MAP_CACHE.forest || (typeof loadMap === 'function' ? loadMap('forest') : null);
+    if (!forest)
+    {
+        return;
+    }
+    var i, had = -1;
+    for (i = 0; i < forest.objects.length; i++)
+    {
+        if (forest.objects[i].kind === 'cart')
+        {
+            had = i;
+            break;
+        }
+    }
+    if (cartDay())
+    {
+        if (had < 0)
+        {
+            forest.objects.push({ kind: 'cart', x: 28, y: 22 });
+            if (typeof rebuildSolid === 'function')
+            {
+                rebuildSolid(forest);
+            }
+        }
+        if (!S.flags.cartStockDay || S.flags.cartStockDay !== cartSeed())
+        {
+            S.flags.cartStock = rollCartStock();
+            S.flags.cartStockDay = cartSeed();
+        }
+    }
+    else if (had >= 0)
+    {
+        forest.objects.splice(had, 1);
+        if (typeof rebuildSolid === 'function')
+        {
+            rebuildSolid(forest);
+        }
+    }
+}
+
+function openTravelingCart()
+{
+    var stock = S.flags.cartStock || rollCartStock();
+    S.flags.cartStock = stock;
+    var m = modalShell('🛒 여행 수레');
+    m.body.appendChild(el('div', 'hint', '금·일요일에만 옵니다. 재고는 그날 고정.'));
+    var i;
+    for (i = 0; i < stock.length; i++)
+    {
+        (function (st)
+        {
+            var it = ITEMS[st.id];
+            if (!it)
+            {
+                return;
+            }
+            var row = el('div', 'listRow');
+            var ic = el('div', 'ic');
+            ic.appendChild(cvOf(itemIcon(st.id, 30), 30));
+            row.appendChild(ic);
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + it.name + '</b>';
+            tx.appendChild(el('small', '', st.price + 'G'));
+            row.appendChild(tx);
+            var b = el('button', 'btn small green', '사기');
+            b.onclick = function ()
+            {
+                if (S.gold < st.price)
+                {
+                    toast('골드가 부족해요.');
+                    return;
+                }
+                if (invFull() && invCount(st.id) === 0)
+                {
+                    toast('가방이 가득 찼어요.');
+                    return;
+                }
+                S.gold -= st.price;
+                give(st.id, 1);
+                sfx('coin');
+                toast(it.name + ' 구매!');
+                closeModal();
+                openTravelingCart();
+            };
+            row.appendChild(b);
+            m.body.appendChild(row);
+        })(stock[i]);
+    }
+    openModal(m);
+}
+
+// ---------- farm cave ----------
+
+MAPS.farm.b = MAPS.farm.b || [];
+// add cave entrance building if not already present
+(function ()
+{
+    var i, has = false;
+    for (i = 0; i < MAPS.farm.b.length; i++)
+    {
+        if (MAPS.farm.b[i].warp === 'farm_cave')
+        {
+            has = true;
+        }
+    }
+    if (!has)
+    {
+        MAPS.farm.b.push({ kind: 'cabin', x: 40, y: 6, tw: 4, th: 3, door: 2,
+            warp: 'farm_cave', sign: '동굴', locked: 'caveChoice' });
+    }
+    // secret woods exit from forest west
+    var fwp = MAPS.forest.wp;
+    var hasW = false;
+    for (i = 0; i < fwp.length; i++)
+    {
+        if (fwp[i].to === 'secret_woods')
+        {
+            hasW = true;
+        }
+    }
+    if (!hasW)
+    {
+        fwp.push({ x: 0, y: 20, w: 1, h: 5, to: 'secret_woods', tx: 28, ty: 16 });
+        MAPS.forest.obj.push({ kind: 'sign', x: 3, y: 22, text: '← 비밀의 숲' });
+    }
+    // mountain north to railroad
+    var mwp = MAPS.mountain.wp;
+    var hasR = false;
+    for (i = 0; i < mwp.length; i++)
+    {
+        if (mwp[i].to === 'railroad')
+        {
+            hasR = true;
+        }
+    }
+    if (!hasR)
+    {
+        mwp.push({ x: 20, y: 0, w: 6, h: 1, to: 'railroad', tx: 18, ty: 22 });
+        MAPS.mountain.obj.push({ kind: 'sign', x: 22, y: 3, text: '↑ 철도' });
+    }
+    // town special order board near mayor area
+    var hasSo = false;
+    for (i = 0; i < MAPS.town.obj.length; i++)
+    {
+        if (MAPS.town.obj[i].kind === 'soboard')
+        {
+            hasSo = true;
+        }
+    }
+    if (!hasSo)
+    {
+        MAPS.town.obj.push({ kind: 'soboard', x: 32, y: 22 });
+        MAPS.town.obj.push({ kind: 'sign', x: 33, y: 22, text: '특별 주문' });
+    }
+})();
+
+INTERIORS.farm_cave = {
+    name: '농장 동굴', w: 14, h: 10, floor: T_STONE, floorCol: '#6a6058', wall: '#5a5048', paper: 'brick',
+    f: [{ k: 'crate', x: 2, y: 2 }, { k: 'barrel', x: 11, y: 2 }, { k: 'lamp', x: 6, y: 5 }],
+    exit: { x: 7, y: 9, to: 'farm', tx: 42, ty: 10 }
+};
+
+MAPS.secret_woods = {
+    name: '비밀의 숲', w: 32, h: 28, ground: T_GRASS, outdoor: true, fish: 'forest',
+    r: [
+        { x: 0, y: 0, w: 32, h: 2, t: T_CLIFF },
+        { x: 0, y: 0, w: 2, h: 28, t: T_CLIFF },
+        { x: 0, y: 26, w: 32, h: 2, t: T_CLIFF },
+        { x: 30, y: 0, w: 2, h: 28, t: T_CLIFF },
+        { x: 8, y: 10, w: 10, h: 8, t: T_WATER },
+        { x: 10, y: 12, w: 6, h: 4, t: T_DEEP },
+        { x: 24, y: 14, w: 4, h: 8, t: T_PATH }
+    ],
+    b: [],
+    obj: [
+        { kind: 'sign', x: 26, y: 14, text: '비밀의 숲' },
+        { kind: 'stump', x: 6, y: 6, hp: 4, big: 1 },
+        { kind: 'stump', x: 18, y: 8, hp: 4, big: 1 },
+        { kind: 'stump', x: 12, y: 20, hp: 4, big: 1 },
+        { kind: 'stump', x: 22, y: 18, hp: 4, big: 1 },
+        { kind: 'stump', x: 8, y: 16, hp: 4, big: 1 }
+    ],
+    wp: [{ x: 31, y: 14, w: 1, h: 4, to: 'forest', tx: 2, ty: 22 }],
+    sc: [
+        { kind: 'tree', n: 40 },
+        { kind: 'bush', n: 12 },
+        { kind: 'stone', n: 8 },
+        { kind: 'weed', n: 14 },
+        { kind: 'grass', n: 40 },
+        { kind: 'flower', n: 10 }
+    ]
+};
+
+MAPS.railroad = {
+    name: '철도', w: 40, h: 26, ground: T_GRASS, outdoor: true, fish: 'lake',
+    r: [
+        { x: 0, y: 0, w: 40, h: 2, t: T_CLIFF },
+        { x: 0, y: 0, w: 2, h: 26, t: T_CLIFF },
+        { x: 0, y: 24, w: 40, h: 2, t: T_CLIFF },
+        { x: 38, y: 0, w: 2, h: 26, t: T_CLIFF },
+        { x: 2, y: 10, w: 36, h: 3, t: T_STONE },
+        { x: 16, y: 4, w: 8, h: 6, t: T_PATH }
+    ],
+    b: [
+        { kind: 'shop2', x: 16, y: 4, tw: 6, th: 5, door: 3, warp: 'spa', sign: '온천' }
+    ],
+    obj: [
+        { kind: 'sign', x: 18, y: 18, text: '철도' },
+        { kind: 'lamp', x: 10, y: 9 },
+        { kind: 'lamp', x: 28, y: 9 },
+        { kind: 'bench', x: 12, y: 14 }
+    ],
+    wp: [{ x: 16, y: 25, w: 6, h: 1, to: 'mountain', tx: 22, ty: 2 }],
+    sc: [
+        { kind: 'tree', n: 16 },
+        { kind: 'stone', n: 12 },
+        { kind: 'grass', n: 50 },
+        { kind: 'flower', n: 12 }
+    ]
+};
+
+INTERIORS.spa = {
+    name: '온천', w: 16, h: 12, floor: T_STONE, floorCol: '#c8dce8', floorStyle: 'checker',
+    wall: '#a8c8d8', paper: 'tile',
+    rugs: [{ c: 'blue', x: 6, y: 8 }],
+    f: [{ k: 'plant', x: 2, y: 2 }, { k: 'plant', x: 13, y: 2 },
+        { k: 'window', x: 5, y: 1 }, { k: 'window', x: 10, y: 1 },
+        { k: 'lamp', x: 3, y: 6 }, { k: 'lamp', x: 12, y: 6 }],
+    spa: true,
+    exit: { x: 8, y: 11, to: 'railroad', tx: 19, ty: 10 }
+};
+
+// ---------- special orders ----------
+
+var SPECIAL_ORDERS = [
+    { id: 'crop_bulk', title: '작물 대량 납품', kind: 'gather', pool: 'crop', n: 50, days: 7,
+        reward: { g: 8000, hearts: 2 } },
+    { id: 'fish_bulk', title: '어획 지원', kind: 'fish', n: 10, days: 7,
+        reward: { g: 6000, hearts: 2 } },
+    { id: 'slay_bulk', title: '동굴 소탕', kind: 'slay', n: 80, days: 7,
+        reward: { g: 10000, hearts: 1 } },
+    { id: 'cook_feast', title: '마을 잔치 요리', kind: 'cook', n: 5, days: 5,
+        reward: { g: 5000, hearts: 3 } },
+    { id: 'ship_gold', title: '출하 목표', kind: 'ship', n: 25000, days: 7,
+        reward: { g: 12000, hearts: 1 } },
+    { id: 'mineral_run', title: '광물 수집', kind: 'gather', pool: 'mineral', n: 20, days: 6,
+        reward: { g: 7000, hearts: 2 } },
+    { id: 'forage_run', title: '들판 채집', kind: 'gather', pool: 'forage', n: 30, days: 5,
+        reward: { g: 4500, hearts: 2 } }
+];
+
+function soWeekKey()
+{
+    return S.year + '-' + S.season + '-' + Math.floor((S.day - 1) / 7);
+}
+
+function ensureSpecialOrders()
+{
+    if (S.year < 1 || (S.year === 1 && S.season === 0 && S.day < 5))
+    {
+        S.specialOrders = S.specialOrders || [];
+        return;
+    }
+    var key = soWeekKey();
+    if (S.flags.soWeek === key && S.specialOrders && S.specialOrders.length)
+    {
+        return;
+    }
+    S.flags.soWeek = key;
+    var seed = S.year * 97 + S.season * 13 + Math.floor((S.day - 1) / 7);
+    var picks = [];
+    var used = {};
+    var tries = 0;
+    while (picks.length < 2 && tries < 40)
+    {
+        tries++;
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        var def = SPECIAL_ORDERS[seed % SPECIAL_ORDERS.length];
+        if (used[def.id])
+        {
+            continue;
+        }
+        used[def.id] = 1;
+        var r = { id: def.id, title: def.title, kind: def.kind, days: def.days,
+            reward: def.reward, taken: false, left: 0, n: def.n, base: 0 };
+        if (def.kind === 'gather')
+        {
+            var pool = typeof poolFor === 'function' ? poolFor(def.pool) : [];
+            if (!pool.length)
+            {
+                continue;
+            }
+            r.item = pool[seed % pool.length];
+            r.title = ITEMS[r.item].name + ' ' + r.n + '개 납품';
+        }
+        else if (def.kind === 'fish')
+        {
+            var f = FISH[seed % FISH.length];
+            if (f.rare)
+            {
+                f = FISH_BY_ID.carp || f;
+            }
+            r.item = f.id;
+            r.n = def.n;
+            r.title = f.name + ' ' + r.n + '마리';
+        }
+        else if (def.kind === 'cook')
+        {
+            if (!S.recipes.length)
+            {
+                continue;
+            }
+            r.item = S.recipes[seed % S.recipes.length];
+            r.n = def.n;
+            r.title = ITEMS[r.item].name + ' ' + r.n + '개';
+        }
+        else if (def.kind === 'slay')
+        {
+            r.base = questStat('monstersKilled');
+        }
+        else if (def.kind === 'ship')
+        {
+            r.base = questStat('earned');
+        }
+        r.who = NPCS[seed % NPCS.length].id;
+        picks.push(r);
+    }
+    // keep taken unfinished orders from previous week? drop them
+    S.specialOrders = picks;
+}
+
+function openSpecialOrders()
+{
+    ensureSpecialOrders();
+    var m = modalShell('📋 특별 주문');
+    m.body.appendChild(el('div', 'hint', '주간 대형 의뢰. 수락 후 기한이 시작됩니다.'));
+    if (!S.specialOrders || !S.specialOrders.length)
+    {
+        m.body.appendChild(el('div', 'hint', '아직 게시된 주문이 없습니다. (봄 5일부터)'));
+        openModal(m);
+        return;
+    }
+    var i;
+    for (i = 0; i < S.specialOrders.length; i++)
+    {
+        (function (idx)
+        {
+            var r = S.specialOrders[idx];
+            var row = el('div', 'listRow');
+            var tx = el('div', 'tx');
+            var prog = '';
+            if (r.taken)
+            {
+                var p = soProgress(r);
+                prog = ' · ' + p + '/' + r.n + ' · 남은 ' + r.left + '일';
+            }
+            tx.innerHTML = '<b>' + r.title + '</b>';
+            tx.appendChild(el('small', '',
+                (NPC_BY_ID[r.who] ? NPC_BY_ID[r.who].name + ' · ' : '') +
+                r.reward.g.toLocaleString() + 'G' + prog));
+            row.appendChild(tx);
+            if (!r.taken)
+            {
+                var b = el('button', 'btn small', '수락');
+                b.onclick = function ()
+                {
+                    r.taken = true;
+                    r.left = r.days;
+                    if (r.kind === 'slay')
+                    {
+                        r.base = questStat('monstersKilled');
+                    }
+                    if (r.kind === 'ship')
+                    {
+                        r.base = questStat('earned');
+                    }
+                    toast('특별 주문을 수락했어요!');
+                    closeModal();
+                    openSpecialOrders();
+                };
+                row.appendChild(b);
+            }
+            else if (soProgress(r) >= r.n)
+            {
+                var b2 = el('button', 'btn small green', '제출');
+                b2.onclick = function ()
+                {
+                    turnInSpecial(idx);
+                    closeModal();
+                    openSpecialOrders();
+                };
+                row.appendChild(b2);
+            }
+            m.body.appendChild(row);
+        })(i);
+    }
+    openModal(m);
+}
+
+function soProgress(r)
+{
+    if (r.kind === 'gather' || r.kind === 'fish' || r.kind === 'cook')
+    {
+        return Math.min(r.n, invCount(r.item));
+    }
+    if (r.kind === 'slay')
+    {
+        return Math.min(r.n, questStat('monstersKilled') - (r.base || 0));
+    }
+    return Math.min(r.n, questStat('earned') - (r.base || 0));
+}
+
+function turnInSpecial(idx)
+{
+    var r = S.specialOrders[idx];
+    if (!r || !r.taken || soProgress(r) < r.n)
+    {
+        return false;
+    }
+    if (r.kind === 'gather' || r.kind === 'fish' || r.kind === 'cook')
+    {
+        removeItem(r.item, r.n);
+    }
+    S.gold += r.reward.g;
+    S.stats.earned += r.reward.g;
+    S.stats.specialDone = (S.stats.specialDone || 0) + 1;
+    if (S.npc[r.who])
+    {
+        addFriend(r.who, 250 * (r.reward.hearts || 1));
+    }
+    S.specialOrders.splice(idx, 1);
+    sfx('coin');
+    modalMsg('특별 주문 완료!', '보상: ' + r.reward.g.toLocaleString() + 'G');
+    if (typeof checkTrophies === 'function')
+    {
+        checkTrophies();
+    }
+    return true;
+}
+
+function tickSpecialOrders()
+{
+    ensureSpecialOrders();
+    if (!S.specialOrders)
+    {
+        return;
+    }
+    var i;
+    for (i = S.specialOrders.length - 1; i >= 0; i--)
+    {
+        var r = S.specialOrders[i];
+        if (r.taken)
+        {
+            r.left--;
+            if (r.left <= 0)
+            {
+                S.specialOrders.splice(i, 1);
+                S.flags.soExpired = (S.flags.soExpired || 0) + 1;
+            }
+        }
+    }
+}
+
+// ---------- guild monster board ----------
+
+var GUILD_TARGETS = [
+    { id: 'slime', name: '슬라임', need: 30, g: 2000, item: 'bomb' },
+    { id: 'bat', name: '박쥐', need: 40, g: 3500, item: 'mega_bomb' },
+    { id: 'skeleton', name: '해골', need: 50, g: 5000, item: 'gold_bar' },
+    { id: 'any', name: '아무 괴물', need: 100, g: 8000, item: 'iridium_bar' }
+];
+
+function openGuildBoard()
+{
+    S.guildKill = S.guildKill || {};
+    var m = modalShell('⚔ 모험가 길드 토벌');
+    m.body.appendChild(el('div', 'hint', '처치 수는 누적됩니다. 목표를 채우면 보상을 받으세요.'));
+    var total = S.stats.monstersKilled || 0;
+    var i;
+    for (i = 0; i < GUILD_TARGETS.length; i++)
+    {
+        (function (t)
+        {
+            var cur = t.id === 'any' ? total : (S.guildKill[t.id] || 0);
+            var done = S.flags['guild_' + t.id];
+            var row = el('div', 'listRow');
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + t.name + ' ' + t.need + '마리</b>';
+            tx.appendChild(el('small', '',
+                (done ? '완료' : (cur + '/' + t.need)) + ' · 보상 ' + t.g + 'G + ' +
+                (ITEMS[t.item] ? ITEMS[t.item].name : t.item)));
+            row.appendChild(tx);
+            if (!done && cur >= t.need)
+            {
+                var b = el('button', 'btn small green', '보상');
+                b.onclick = function ()
+                {
+                    S.flags['guild_' + t.id] = true;
+                    S.gold += t.g;
+                    give(t.item, 1);
+                    sfx('coin');
+                    toast('토벌 보상 수령!');
+                    closeModal();
+                    openGuildBoard();
+                };
+                row.appendChild(b);
+            }
+            m.body.appendChild(row);
+        })(GUILD_TARGETS[i]);
+    }
+    openModal(m);
+}
+
+function noteGuildKill(mobType)
+{
+    S.guildKill = S.guildKill || {};
+    var key = mobType || 'any';
+    // map slime colors etc.
+    if (key.indexOf('slime') >= 0)
+    {
+        key = 'slime';
+    }
+    if (key.indexOf('bat') >= 0)
+    {
+        key = 'bat';
+    }
+    if (key.indexOf('skeleton') >= 0 || key === 'mummy')
+    {
+        key = 'skeleton';
+    }
+    S.guildKill[key] = (S.guildKill[key] || 0) + 1;
+}
+
+// ---------- heart event lines ----------
+
+var HEART_EVENTS = {
+    abigail: {
+        2: '광산에서 주운 자수정이야. 너한테 보여주고 싶었어.',
+        4: '같이 모험 가면 든든할 것 같아. 진짜로.',
+        6: '엄마 몰래 기타 연습 중이야. 나중에 들려줄게.',
+        8: '이 마을이 답답했는데... 네가 와서 달라졌어.',
+        10: '너랑 있으면 용기가 나. 앞으로도 옆에 있을게.'
+    },
+    alex: {
+        2: '그리드볼 연습 볼 좀 받아줄래? ...고마워.',
+        4: '사실 할머니 이야기를 잘 못 해. 너는 들어주니까 편해.',
+        6: '프로가 되면 첫 경기에 초대할게.',
+        8: '운동만 아는 줄 알았는데, 너 덕분에 다른 것도 보여.',
+        10: '내 미래 계획에 네가 들어가 있어. 알아둬.'
+    },
+    elliott: {
+        2: '바닷가에서 쓴 시 한 구절이에요. 받아 두세요.',
+        4: '당신의 농장 이야기가 소설보다 흥미롭군요.',
+        6: '원고가 막힐 때마다 당신을 생각해요.',
+        8: '함께 도시로 떠나 책을 내고 싶어요. 언젠가.',
+        10: '내 이야기의 주인공은... 이미 정해졌어요.'
+    },
+    emily: {
+        2: '오늘 꿈에 네가 나왔어. 좋은 기운이야!',
+        4: '이 천 조각으로 네 옷 한 벌 만들어 줄게.',
+        6: '살롱에서 춤출 때 네 얼굴을 떠올려.',
+        8: '우린 전생에도 친구였을 거야. 느껴져.',
+        10: '네 기운이 내 하루를 밝혀 줘. 정말이야.'
+    },
+    haley: {
+        2: '사진 모델 되어 줄래? ...거절하지 마.',
+        4: '흙 묻은 손도... 사실 그렇게 싫지 않아.',
+        6: '이 마을 사진첩을 만들고 있어. 네 농장도 넣을게.',
+        8: '언니한테만 의지했는데, 이젠 너도 있어.',
+        10: '가장 예쁜 사진은 너랑 찍은 거야. 비밀이야.'
+    },
+    harvey: {
+        2: '혈압 재 드릴까요? ...농담입니다. 커피 하실래요?',
+        4: '비행기 소리 들으러 같이 산 정상 가요.',
+        6: '당신이 무리하는 게 제일 걱정입니다.',
+        8: '병원 일을 마치고 가장 보고 싶은 사람이 당신이에요.',
+        10: '건강보다 소중한 건... 당신과 보내는 시간입니다.'
+    },
+    leah: {
+        2: '숲에서 주운 나뭇조각이야. 조각해 줄게.',
+        4: '네 농장 풍경을 스케치했어. 받아.',
+        6: '도시로 돌아갈 뻔했는데, 네가 붙잡은 것 같아.',
+        8: '같이 사는 조각가가 있다면... 상상이 돼.',
+        10: '내 최고의 작품은, 너와 만든 시간이야.'
+    },
+    maru: {
+        2: '새 로봇 팔이야. 폭발은 안 할 거야. 아마.',
+        4: '네 농장에 자동 물주기 시제품을 두고 싶어.',
+        6: '별을 보면 네 농장 불빛도 보여. 예쁘더라.',
+        8: '발명품보다 네 반응이 더 궁금해졌어.',
+        10: '우리 같이 별을 보는 관측소를 짓자.'
+    },
+    penny: {
+        2: '아이들에게 읽어 준 책 구절이에요. 나눠 드리고 싶었어요.',
+        4: '조용한 도서관 같은 시간이 필요해요. 같이 있어 주실래요?',
+        6: '당신처럼 성실한 사람을 존경해요.',
+        8: '언젠가 제 정원을 가꿀 때, 옆에 있어 주세요.',
+        10: '당신과 함께하는 미래가... 가장 따뜻한 이야기예요.'
+    },
+    sam: {
+        2: '밴드 연습 들어줄래? 박수 치는 거면 돼!',
+        4: '스케이트 타다 넘어졌어. ...웃지 마. 웃어도 돼.',
+        6: '네 이름을 딴 곡 후렴을 썼어.',
+        8: '우리 밴드 첫 투어에 매니저로 올래?',
+        10: '제일 큰 관객은 너야. 항상.'
+    },
+    sebastian: {
+        2: '...비 오는 날이 좋아. 너는?',
+        4: '지하실 코드 리뷰... 해 줄래? 농담이야. 반만.',
+        6: '오토바이 뒷자리에 태워 줄게. 헬멧 써.',
+        8: '떠날 생각만 했는데, 남을 이유도 생겼어.',
+        10: '말 안 해도 알지. ...옆에 있어 줘서 고마워.'
+    },
+    shane: {
+        2: '...닭 이름은 내가 다 붙였다. 웃기지 마.',
+        4: '맥주 대신 탄산 마셨다. 칭찬해라.',
+        6: '네가 말 걸어준 날부터 조금 살 만하다.',
+        8: '조조마트 때려치우고 싶다. 진짜로.',
+        10: '나 같은 놈을 기다려 줘서... 고맙다. 진심이야.'
+    }
+};
+
+// ---------- grandpa evaluation ----------
+
+function grandpaScore()
+{
+    var score = 0;
+    if ((S.stats.earned || 0) >= 50000)
+    {
+        score++;
+    }
+    if ((S.stats.earned || 0) >= 100000)
+    {
+        score++;
+    }
+    if (totalNpcHearts() >= 30)
+    {
+        score++;
+    }
+    if (totalNpcHearts() >= 60)
+    {
+        score++;
+    }
+    if (S.flags.centerDone)
+    {
+        score += 2;
+    }
+    if ((S.mineDeep || 0) >= 120)
+    {
+        score++;
+    }
+    if (S.married)
+    {
+        score++;
+    }
+    if ((S.animals || []).length >= 5)
+    {
+        score++;
+    }
+    if ((S.maxEnergy || BASE_ENERGY) >= BASE_ENERGY + 34)
+    {
+        score++;
+    }
+    return Math.min(4, Math.floor(score / 2));
+}
+
+function tryGrandpaEval()
+{
+    if (S.flags.grandpaDone)
+    {
+        return;
+    }
+    if (!(S.year >= 3 && S.season === 0 && S.day === 1))
+    {
+        return;
+    }
+    S.flags.grandpaDone = true;
+    var candles = grandpaScore();
+    var msg = '할아버지의 영혼이 농장을 찾아왔어요.\n촛불이 ' + candles + '개 켜졌습니다.\n\n';
+    if (candles >= 4)
+    {
+        msg += '매우 자랑스러워하십니다.';
+        giveStardropOnce('grandpa');
+    }
+    else if (candles >= 2)
+    {
+        msg += '잘 해왔다고 말씀하세요.';
+        S.gold += 5000;
+    }
+    else
+    {
+        msg += '아직 갈 길이 있다고 하십니다. 힘내세요.';
+        S.gold += 1000;
+    }
+    setTimeout(function ()
+    {
+        modalMsg('👴 할아버지의 평가', msg);
+    }, 600);
+}
+
+// ---------- stardrop sources ----------
+
+function giveStardropOnce(flag)
+{
+    var key = 'sd_' + flag;
+    if (S.flags[key])
+    {
+        return false;
+    }
+    S.flags[key] = true;
+    give('stardrop', 1);
+    return true;
+}
+
+function checkStardropSources()
+{
+    // museum 20
+    var n = 0, k;
+    for (k in (S.museum || {}))
+    {
+        if (S.museum.hasOwnProperty(k))
+        {
+            n++;
+        }
+    }
+    if (n >= 20)
+    {
+        if (giveStardropOnce('museum20'))
+        {
+            S.flags.stardropNews = '박물관 기증 보상으로 스타드롭을 받았어요!';
+        }
+    }
+    // mine 120
+    if ((S.mineDeep || 0) >= 120)
+    {
+        if (giveStardropOnce('mine120'))
+        {
+            S.flags.stardropNews = '광산 최심부에서 스타드롭을 발견했어요!';
+        }
+    }
+    // spouse love after 14 married days
+    if (S.married && (S.stats.daysPlayed || 0) - (S.flags.marriedDay || 0) >= 14)
+    {
+        if (giveStardropOnce('spouse'))
+        {
+            S.flags.stardropNews = '배우자가 특별한 선물을 건넸어요... 스타드롭!';
+        }
+    }
+}
+
+// ---------- farmhouse upgrade ----------
+
+var HOUSE_UPGRADES = [
+    { lvl: 1, name: '농가 확장', cost: 10000, need: { wood: 450 },
+        desc: '부엌이 넓어지고 여유 공간이 생깁니다.' },
+    { lvl: 2, name: '농가 2차 확장', cost: 50000, need: { wood: 150, hardwood: 100 },
+        desc: '아이 방과 배우자 공간이 생깁니다. 지하에 오크 통을 둘 수 있습니다.' }
+];
+
+function houseLevel()
+{
+    return S.houseLevel || 0;
+}
+
+function applyHouseUpgradeVisual()
+{
+    // furniture is injected in buildInterior wrapper; nothing mutates INTERIORS
+}
+
+function decorateFarmhouse(m)
+{
+    if (!m || !S)
+    {
+        return;
+    }
+    var lvl = houseLevel();
+    if (lvl >= 1)
+    {
+        m.objects.push({ kind: 'furn', fk: 'plant', x: 15, y: 3 });
+        m.objects.push({ kind: 'furn', fk: 'books', x: 14, y: 8 });
+    }
+    if (lvl >= 2)
+    {
+        m.objects.push({ kind: 'furn', fk: 'bed', x: 15, y: 2 });
+        m.objects.push({ kind: 'furn', fk: 'table', x: 12, y: 7 });
+        m.objects.push({ kind: 'furn', fk: 'plant', x: 16, y: 9 });
+        m.objects.push({ kind: 'sign', x: 16, y: 5, text: '아이 방' });
+    }
+}
+
+// wrap buildInterior once so house level furniture is applied per-save
+(function ()
+{
+    if (typeof buildInterior !== 'function' || buildInterior._gapWrapped)
+    {
+        return;
+    }
+    var orig = buildInterior;
+    function wrapped(id)
+    {
+        var m = orig(id);
+        if (id === 'farmhouse')
+        {
+            decorateFarmhouse(m);
+            if (typeof rebuildSolid === 'function')
+            {
+                rebuildSolid(m);
+            }
+        }
+        return m;
+    }
+    wrapped._gapWrapped = true;
+    buildInterior = wrapped;
+})();
+
+function tryBuyHouseUpgrade()
+{
+    var lvl = houseLevel();
+    if (lvl >= 2)
+    {
+        toast('이미 최대 확장입니다.');
+        return;
+    }
+    var u = HOUSE_UPGRADES[lvl];
+    if (S.gold < u.cost)
+    {
+        toast('골드가 부족해요.');
+        return;
+    }
+    var k;
+    for (k in u.need)
+    {
+        if (u.need.hasOwnProperty(k) && invCount(k) < u.need[k])
+        {
+            toast(ITEMS[k].name + '이(가) 부족해요.');
+            return;
+        }
+    }
+    S.gold -= u.cost;
+    for (k in u.need)
+    {
+        if (u.need.hasOwnProperty(k))
+        {
+            removeItem(k, u.need[k]);
+        }
+    }
+    S.houseLevel = lvl + 1;
+    if (MAP_CACHE.farmhouse)
+    {
+        delete MAP_CACHE.farmhouse;
+    }
+    if (S.map === 'farmhouse')
+    {
+        MAP = loadMap('farmhouse');
+    }
+    if (lvl + 1 === 1)
+    {
+        give('chest', 1);
+    }
+    if (lvl + 1 === 2)
+    {
+        give('cask', 1);
+    }
+    modalMsg('🏠 ' + u.name, '로빈이 공사를 마쳤습니다!\n' + u.desc);
+    sfx('level');
+}
+
+// ---------- backpack ----------
+
+function tryUseBackpack(id)
+{
+    if (id === 'backpack')
+    {
+        if (S.invSize >= 24)
+        {
+            toast('이미 큰 가방을 쓰고 있어요.');
+            return false;
+        }
+        expandInv(24);
+        removeItem('backpack', 1);
+        modalMsg('가방 확장', '가방이 24칸으로 늘어났어요!');
+        return true;
+    }
+    if (id === 'backpack2')
+    {
+        if (S.invSize >= 36)
+        {
+            toast('이미 최대 크기예요.');
+            return false;
+        }
+        expandInv(36);
+        removeItem('backpack2', 1);
+        modalMsg('가방 확장', '가방이 36칸으로 늘어났어요!');
+        return true;
+    }
+    return false;
+}
+
+function expandInv(size)
+{
+    S.invSize = size;
+    while (S.inv.length < S.invSize)
+    {
+        S.inv.push(null);
+    }
+    UI.lastHudKey = '';
+}
+
+// ---------- cave daily spawn ----------
+
+function tickFarmCave()
+{
+    if (!S.flags.caveChoice)
+    {
+        return;
+    }
+    var cave = MAP_CACHE.farm_cave;
+    if (!cave && typeof loadMap === 'function')
+    {
+        cave = loadMap('farm_cave');
+    }
+    if (!cave)
+    {
+        return;
+    }
+    // clear old forage in cave
+    var i;
+    for (i = cave.objects.length - 1; i >= 0; i--)
+    {
+        if (cave.objects[i].kind === 'forage' || cave.objects[i].kind === 'drop')
+        {
+            if (cave.objects[i].caveSpawn)
+            {
+                cave.objects.splice(i, 1);
+            }
+        }
+    }
+    var items;
+    if (S.flags.caveChoice === 'bats')
+    {
+        items = ['apple', 'cherry', 'orange', 'peach', 'apricot', 'pomegranate', 'spice_berry'];
+    }
+    else
+    {
+        items = ['common_mushroom', 'red_mushroom', 'purple_mushroom', 'chanterelle', 'morel'];
+    }
+    var n = 2 + Math.floor(Math.random() * 3);
+    var tries = 0;
+    while (n > 0 && tries < 80)
+    {
+        tries++;
+        var x = 2 + Math.floor(Math.random() * (cave.w - 4));
+        var y = 2 + Math.floor(Math.random() * (cave.h - 4));
+        if (typeof isSolid === 'function' && isSolid(cave, x, y))
+        {
+            continue;
+        }
+        if (typeof objAt === 'function' && objAt(cave, x, y))
+        {
+            continue;
+        }
+        cave.objects.push({
+            kind: 'forage', x: x, y: y,
+            item: items[Math.floor(Math.random() * items.length)],
+            caveSpawn: 1
+        });
+        n--;
+    }
+}
+
+function offerCaveChoice()
+{
+    if (S.flags.caveChoice)
+    {
+        return;
+    }
+    if ((S.stats.daysPlayed || 0) < 5)
+    {
+        return;
+    }
+    if (S.flags.caveOffered)
+    {
+        return;
+    }
+    // demetrius friendship or just day-based
+    S.flags.caveOffered = true;
+    setTimeout(function ()
+    {
+        modalChoice('🦇 데메트리우스',
+            '농장 뒤 동굴을 연구하고 싶습니다.\n과일 박쥐를 들일까요, 아니면 버섯을 키울까요?\n(한 번 고르면 바꿀 수 없습니다)',
+            [
+                { t: '과일 박쥐', cls: 'green', cb: function ()
+                {
+                    S.flags.caveChoice = 'bats';
+                    closeModal();
+                    modalMsg('농장 동굴', '과일 박쥐가 살게 되었어요. 매일 동굴을 확인해 보세요!');
+                    if (MAP_CACHE.farm)
+                    {
+                        delete MAP_CACHE.farm;
+                    }
+                } },
+                { t: '버섯', cls: '', cb: function ()
+                {
+                    S.flags.caveChoice = 'mushrooms';
+                    closeModal();
+                    modalMsg('농장 동굴', '동굴에 버섯이 피어날 거예요. 매일 확인해 보세요!');
+                    if (MAP_CACHE.farm)
+                    {
+                        delete MAP_CACHE.farm;
+                    }
+                } }
+            ]);
+    }, 800);
+}
+
+// ---------- night market (winter 15-17) ----------
+
+function isNightMarket()
+{
+    return seasonId() === 'winter' && S.day >= 15 && S.day <= 17 && S.time >= 17 * 60 && S.time < 26 * 60;
+}
+
+function nightMarketStock()
+{
+    return [
+        { id: 'rare_seed', price: 1000 },
+        { id: 'coffee', price: 250 },
+        { id: 'warp_totem', price: 400 },
+        { id: 'omni_geode', price: 500 },
+        { id: 'battery_pack', price: 1000 },
+        { id: 'hat_santa', price: 0 }
+    ];
+}
+
+function openNightMarket()
+{
+    var m = modalShell('🌌 밤 시장');
+    m.body.appendChild(el('div', 'hint', '겨울 15~17일 저녁에만 열립니다.'));
+    var stock = nightMarketStock();
+    var i;
+    for (i = 0; i < stock.length; i++)
+    {
+        (function (st)
+        {
+            var it = ITEMS[st.id];
+            if (!it)
+            {
+                return;
+            }
+            var row = el('div', 'listRow');
+            var ic = el('div', 'ic');
+            ic.appendChild(cvOf(itemIcon(st.id, 30), 30));
+            row.appendChild(ic);
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + it.name + '</b>';
+            var priceLabel = st.price <= 0 ? '무료 (1회)' : (st.price + 'G');
+            tx.appendChild(el('small', '', priceLabel));
+            row.appendChild(tx);
+            var b = el('button', 'btn small green', '사기');
+            b.onclick = function ()
+            {
+                if (st.price <= 0)
+                {
+                    if (S.flags.nmSanta)
+                    {
+                        toast('이미 받았어요.');
+                        return;
+                    }
+                    S.flags.nmSanta = true;
+                    give(st.id, 1);
+                    sfx('coin');
+                    toast(it.name + '!');
+                    closeModal();
+                    return;
+                }
+                if (S.gold < st.price)
+                {
+                    toast('골드가 부족해요.');
+                    return;
+                }
+                S.gold -= st.price;
+                give(st.id, 1);
+                sfx('coin');
+                toast(it.name + ' 구매!');
+            };
+            row.appendChild(b);
+            m.body.appendChild(row);
+        })(stock[i]);
+    }
+    // simple dive minigame button
+    var dive = el('button', 'btn', '🤿 잠수 (한 번)');
+    dive.onclick = function ()
+    {
+        if (S.flags.nmDiveDay === S.day)
+        {
+            toast('오늘은 이미 잠수했어요.');
+            return;
+        }
+        S.flags.nmDiveDay = S.day;
+        var loot = ['coral', 'seaweed', 'clam', 'nautilus_shell', 'pearl_fake', 'sea_urchin'];
+        if (!ITEMS.pearl_fake)
+        {
+            I('pearl_fake', '진주', 'mineral', 500, 'gem', ['#f0f0f8', '#c0c0d0', '#ffffff']);
+        }
+        var got = loot[Math.floor(Math.random() * loot.length)];
+        if (!ITEMS[got])
+        {
+            got = 'coral';
+        }
+        give(got, 1);
+        sfx('fish');
+        modalMsg('잠수', '바닷속에서 ' + ITEMS[got].name + '을(를) 건졌어요!');
+    };
+    m.body.appendChild(dive);
+    openModal(m);
+}
+
+function syncNightMarket()
+{
+    var beach = MAP_CACHE.beach;
+    if (!beach && typeof loadMap === 'function')
+    {
+        beach = loadMap('beach');
+    }
+    if (!beach)
+    {
+        return;
+    }
+    var i, had = -1;
+    for (i = 0; i < beach.objects.length; i++)
+    {
+        if (beach.objects[i].kind === 'nmstall')
+        {
+            had = i;
+            break;
+        }
+    }
+    if (isNightMarket())
+    {
+        if (had < 0)
+        {
+            beach.objects.push({ kind: 'nmstall', x: 20, y: 12 });
+            beach.objects.push({ kind: 'nmstall', x: 26, y: 12 });
+            if (typeof rebuildSolid === 'function')
+            {
+                rebuildSolid(beach);
+            }
+        }
+    }
+    else if (had >= 0)
+    {
+        for (i = beach.objects.length - 1; i >= 0; i--)
+        {
+            if (beach.objects[i].kind === 'nmstall')
+            {
+                beach.objects.splice(i, 1);
+            }
+        }
+        if (typeof rebuildSolid === 'function')
+        {
+            rebuildSolid(beach);
+        }
+    }
+}
+
+// ---------- spa restore ----------
+
+function useSpa()
+{
+    S.energy = S.maxEnergy;
+    S.health = S.maxHealth;
+    toast('♨️ 온천에서 기력과 체력을 회복했어요!');
+    sfx('level');
+    if (!S.flags.spaVisit)
+    {
+        S.flags.spaVisit = true;
+        give('spa_towel', 1);
+    }
+}
+
+// ---------- machine helpers for crystalarium / cask ----------
+
+function gapMachineInsert(o, slotIdx)
+{
+    var sl = S.inv[slotIdx];
+    if (!sl || o.busy || o.out)
+    {
+        return false;
+    }
+    if (o.mk === 'crystalarium')
+    {
+        if (CRYSTAL_GEMS.indexOf(sl.id) < 0)
+        {
+            toast('보석만 넣을 수 있어요.');
+            return false;
+        }
+        var gem = sl.id;
+        removeItem(sl.id, 1, sl.q);
+        o.busy = true;
+        o.readyAt = nowHours() + 120;
+        o.pending = { id: gem, n: 1, q: 0 };
+        sfx('machine');
+        return true;
+    }
+    if (o.mk === 'cask')
+    {
+        if (CASK_ITEMS.indexOf(sl.id) < 0)
+        {
+            toast('와인·치즈·맥주 등을 넣으세요.');
+            return false;
+        }
+        if ((sl.q || 0) >= 3)
+        {
+            toast('이미 최고 품질이에요.');
+            return false;
+        }
+        // cask only works in upgraded farmhouse
+        if (S.map !== 'farmhouse' || houseLevel() < 2)
+        {
+            toast('농가 2차 확장 후에만 쓸 수 있어요.');
+            return false;
+        }
+        var nq = Math.min(3, (sl.q || 0) + 1);
+        var sid = sl.id;
+        removeItem(sl.id, 1, sl.q);
+        o.busy = true;
+        o.readyAt = nowHours() + 56;
+        o.pending = { id: sid, n: 1, q: nq };
+        sfx('machine');
+        return true;
+    }
+    return false;
+}
+
+// ---------- secret woods stump respawn ----------
+
+function tickSecretWoods()
+{
+    var m = MAP_CACHE.secret_woods;
+    if (!m)
+    {
+        return;
+    }
+    var stumps = 0, i;
+    for (i = 0; i < m.objects.length; i++)
+    {
+        if (m.objects[i].kind === 'stump')
+        {
+            stumps++;
+        }
+    }
+    var want = 5 - stumps;
+    var tries = 0;
+    while (want > 0 && tries < 60)
+    {
+        tries++;
+        var x = 3 + Math.floor(Math.random() * (m.w - 6));
+        var y = 3 + Math.floor(Math.random() * (m.h - 6));
+        if (isSolid(m, x, y) || objAt(m, x, y))
+        {
+            continue;
+        }
+        if (tileAt(m, x, y) !== T_GRASS)
+        {
+            continue;
+        }
+        m.objects.push({ kind: 'stump', x: x, y: y, hp: 4, big: 1 });
+        want--;
+    }
+}
+
+// ---------- daily / load hooks ----------
+
+function gapOnNewDay()
+{
+    syncTravelingCart();
+    syncNightMarket();
+    tickFarmCave();
+    tickSecretWoods();
+    tickSpecialOrders();
+    offerCaveChoice();
+    checkStardropSources();
+    tryGrandpaEval();
+    // spouse stardrop day marker
+    if (S.married && !S.flags.marriedDay)
+    {
+        S.flags.marriedDay = S.stats.daysPlayed || 0;
+    }
+    if (S.flags.stardropNews)
+    {
+        var msg = S.flags.stardropNews;
+        S.flags.stardropNews = null;
+        setTimeout(function ()
+        {
+            modalMsg('⭐ 스타드롭', msg);
+        }, 500);
+    }
+}
+
+function gapOnLoad()
+{
+    defGapSave(S);
+    applyHouseUpgradeVisual();
+    ensureSpecialOrders();
+    syncTravelingCart();
+    syncNightMarket();
+}
+
+function defGapSave(d)
+{
+    if (!d)
+    {
+        return;
+    }
+    if (d.houseLevel === undefined)
+    {
+        d.houseLevel = 0;
+    }
+    if (!d.specialOrders)
+    {
+        d.specialOrders = [];
+    }
+    if (!d.guildKill)
+    {
+        d.guildKill = {};
+    }
+    if (d.stats && d.stats.specialDone === undefined)
+    {
+        d.stats.specialDone = 0;
+    }
+}
+
+// ---------- TV expansion ----------
+
+function gapWatchTvExtra()
+{
+    var luck = luckText();
+    var weather = '내일 날씨: ' + WEATHER_KR[S.tomorrow];
+    var fortune = '오늘의 운세: ' + luck;
+    var tip = '';
+    if (cartDay())
+    {
+        tip = '\n\n📢 오늘 숲에 여행 수레가 왔다는 소문이에요!';
+    }
+    if (seasonId() === 'winter' && S.day >= 15 && S.day <= 17)
+    {
+        tip += '\n\n🌌 밤 시장이 해변에서 열립니다 (저녁).';
+    }
+    return weather + '\n\n' + fortune + tip;
+}
+
+// ---------- interact helpers ----------
+
+function gapInteract(o)
+{
+    if (!o)
+    {
+        return false;
+    }
+    if (o.kind === 'cart')
+    {
+        openTravelingCart();
+        return true;
+    }
+    if (o.kind === 'soboard')
+    {
+        openSpecialOrders();
+        return true;
+    }
+    if (o.kind === 'nmstall')
+    {
+        openNightMarket();
+        return true;
+    }
+    if (o.kind === 'guildboard')
+    {
+        openGuildBoard();
+        return true;
+    }
+    return false;
+}
+
+// guild interior board object
+(function ()
+{
+    var g = INTERIORS.guild;
+    if (g && g.f)
+    {
+        var has = false, i;
+        for (i = 0; i < g.f.length; i++)
+        {
+            if (g.f[i].k === 'board')
+            {
+                has = true;
+            }
+        }
+        // use world object instead - add on map build via guild flag
+    }
+})();
+
+// place guild board as map object when entering - handled via furn board in guild?
+// Use counter interact for marlon + separate: when MAP.interior.guild, interact board opens guild
+// Add object after build in gapOnLoad via MAPS not interiors furniture
+// Put a board furniture - main.js board opens requests. Special case guild.
+
+function gapTryGuildCounter()
+{
+    if (MAP && MAP.interior && MAP.interior.guild)
+    {
+        openGuildBoard();
+        return true;
+    }
+    return false;
+}
+
+// ---------- draw extensions (called from patched drawObject default path) ----------
+
+function gapDrawObject(g, o, x, y, tick)
+{
+    if (o.kind === 'cart')
+    {
+        // wagon shape with item icon flair
+        pr(g, x + 2, y + 10, 28, 14, '#8a5a2a');
+        pr(g, x + 2, y + 10, 28, 3, '#c8a060');
+        pr(g, x + 4, y + 2, 24, 12, '#c86848');
+        pr(g, x + 4, y + 2, 24, 3, '#e88868');
+        pr(g, x + 4, y + 20, 6, 6, '#3a3a3a');
+        pr(g, x + 22, y + 20, 6, 6, '#3a3a3a');
+        drawSparkle(g, x + HALF, y, tick);
+        return true;
+    }
+    if (o.kind === 'soboard')
+    {
+        pr(g, x + 6, y + 4, 20, 24, '#6a4a2a');
+        pr(g, x + 8, y + 6, 16, 18, '#e8d8b0');
+        pr(g, x + 10, y + 9, 12, 2, '#8a6a4a');
+        pr(g, x + 10, y + 13, 12, 2, '#8a6a4a');
+        pr(g, x + 10, y + 17, 8, 2, '#8a6a4a');
+        return true;
+    }
+    if (o.kind === 'nmstall')
+    {
+        pr(g, x, y + 8, 32, 16, '#3a2a5a');
+        pr(g, x + 2, y + 2, 28, 10, '#7a5ab0');
+        pr(g, x + 2, y + 2, 28, 3, '#b898e8');
+        drawSparkle(g, x + HALF, y, tick);
+        return true;
+    }
+    return false;
+}
+
+
+/* ===== late.js ===== */
+
+// Starry Farm - late content pack v4.1 (Joja, fish pond, casino, theater, island, volcano).
+// Loads after gap.js. Multiplayer is intentionally not networked (see lateMultiplayerNote).
+// All comments ASCII only.
+
+// ---------- items ----------
+
+I('joja_cola', '조자 콜라', 'cook', 25, 'bottle', ['#3a5a9a', '#1a2a5a', '#6a8aca'], { energy: 13 });
+I('joja_member', '조자 회원권', 'misc', 0, 'scroll', ['#3a5a9a', '#1a2a5a', '#8ab0e0'],
+    { desc: '조자마트 멤버십. 번들 대신 골드로 마을을 복구한다.' });
+I('fish_pond', '어항', 'craft', 0, 'machine_jar', ['#4a88b8', '#1a4868', '#88c8e8'],
+    { desc: '농장에 놓고 물고기를 키운다.' });
+I('roe', '어란', 'artisan', 80, 'egg', ['#e87898', '#a83858', '#f8b0c8']);
+I('aged_roe', '숙성 어란', 'artisan', 160, 'egg', ['#c85878', '#882838', '#e898b0']);
+I('qi_coin', '치 코인', 'misc', 0, 'gem', ['#e8c040', '#a88010', '#fff080'],
+    { desc: '카지노 전용 화폐.' });
+I('qi_gem', '치 보석', 'misc', 0, 'gem', ['#48e8c8', '#18a888', '#98fff0']);
+I('movie_ticket', '영화 티켓', 'misc', 0, 'scroll', ['#e8e0d0', '#a8a090', '#ffffff']);
+I('boat_ticket', '섬행 티켓', 'misc', 0, 'scroll', ['#68a8d8', '#286888', '#b8e8ff'],
+    { desc: '해변 부두에서 진저 섬으로 간다.' });
+I('golden_walnut', '황금 호두', 'misc', 0, 'ball', ['#d8a020', '#986000', '#f8e060'],
+    { desc: '진저 섬의 비밀을 여는 열쇠.' });
+I('banana', '바나나', 'crop', 150, 'ball', ['#e8d048', '#a89018', '#fff880']);
+I('mango', '망고', 'crop', 130, 'ball', ['#e88828', '#a85808', '#f8b868']);
+I('pineapple', '파인애플', 'crop', 300, 'ball', ['#e0b040', '#886818', '#68a838']);
+I('taro_root', '토란', 'crop', 100, 'root', ['#c8a878', '#886838', '#e8d0a8']);
+I('ginger', '생강', 'forage', 60, 'root', ['#e0c090', '#a08050', '#f0e0b0']);
+I('cinder_shard', '잿더미 파편', 'mineral', 50, 'ore', ['#e05030', '#802010', '#f09050']);
+I('dragon_tooth', '용의 이빨', 'mineral', 500, 'bone', ['#f0e8d0', '#b0a890', '#ffffff']);
+I('island_warp', '섬 토템', 'craft', 0, 'scroll', ['#48c8a8', '#188868', '#98f0d8']);
+
+// tropical crops
+I('pineapple_seeds', '파인애플 씨앗', 'seed', 240, 'seed', ['#e0b040', '#886818']);
+I('taro_seeds', '토란 씨앗', 'seed', 20, 'seed', ['#c8a878', '#886838']);
+CROPS.pineapple_seeds = { crop: 'pineapple', season: 'summer', form: 'stalk', days: 14, regrow: 7, yield: 1 };
+CROPS.taro_seeds = { crop: 'taro_root', season: 'summer', form: 'root', days: 10, regrow: 0, yield: 1 };
+CROP_TO_SEED.pineapple = 'pineapple_seeds';
+CROP_TO_SEED.taro_root = 'taro_seeds';
+FRUITS.push('banana', 'mango', 'pineapple');
+
+CRAFTING.push(
+    { id: 'fish_pond', need: { stone: 200, seaweed: 5, fiber: 20 }, lvl: { fishing: 5 } },
+    { id: 'island_warp', need: { hardwood: 5, dragon_tooth: 1, ginger: 5 }, lvl: { foraging: 8 }, out: 1 }
+);
+
+// ---------- Joja route ----------
+
+var JOJA_UNLOCKS = [
+    { id: 'bridge', name: '다리 수리', cost: 25000, reward: 'bridge', flag: 'quarry' },
+    { id: 'greenhouse', name: '온실', cost: 35000, reward: 'greenhouse', flag: 'greenhouse' },
+    { id: 'minecart', name: '광산차', cost: 15000, reward: 'minecart', flag: 'minecart' },
+    { id: 'bus', name: '버스', cost: 40000, reward: 'bus', flag: 'bus' },
+    { id: 'paving', name: '마을 포장', cost: 20000, reward: 'friend', flag: null },
+    { id: 'movie', name: '영화관 지원', cost: 50000, reward: null, flag: 'theater' }
+];
+
+MAPS.town.b.push({
+    kind: 'shop3', x: 50, y: 18, tw: 5, th: 5, door: 2, warp: 'joja', sign: '조자마트'
+});
+
+INTERIORS.joja = {
+    name: '조자마트', w: 18, h: 12, floor: T_STONE, floorCol: '#c8d0d8', floorStyle: 'checker',
+    wall: '#4a6a9a', paper: 'tile',
+    f: [{ k: 'counter', x: 8, y: 3 }, { k: 'shelf', x: 2, y: 2 }, { k: 'shelf', x: 14, y: 2 },
+        { k: 'goods', x: 2, y: 6 }, { k: 'goods', x: 14, y: 6 }, { k: 'crate', x: 2, y: 9 },
+        { k: 'window', x: 5, y: 1 }, { k: 'window', x: 12, y: 1 }, { k: 'clock', x: 9, y: 1 }],
+    joja: true, npc: { id: 'morris', x: 9, y: 5 },
+    exit: { x: 9, y: 11, to: 'town', tx: 52, ty: 24 }
+};
+
+NPCS.push({
+    id: 'morris', name: '모리스', gender: 'm', bd: { s: 'spring', d: 3 },
+    look: { skin: '#e8c098', hair: '#3a3a3a', hairStyle: 'short', shirt: '#3a5a9a', pants: '#2a2a3a',
+        hat: { style: 'fedora', col: '#3a5a9a' } },
+    loves: ['joja_cola', 'diamond'], likes: ['gold_bar', 'iron_bar'],
+    sch: [[6, 'joja', 9, 5], [21, 'joja', 9, 5]],
+    lines: ['조자마트에 오신 걸 환영합니다! 효율이 최고의 가치죠.',
+        '커뮤니티 센터? 시대에 뒤떨어진 건물입니다.',
+        '회원권을 끊으시면 특별 복구 프로젝트를 진행할 수 있습니다.',
+        '조자 콜라 한 캔 어떠세요?']
+});
+if (typeof registerNpc === 'function')
+{
+    registerNpc(NPCS[NPCS.length - 1]);
+}
+
+function openJoja()
+{
+    var m = modalShell('🏢 조자마트');
+    m.body.appendChild(el('div', 'hint',
+        S.flags.joja ? '회원 전용 마을 복구 프로젝트' :
+            '회원권 5,000G로 번들 대신 골드로 마을을 복구할 수 있습니다.\n(커뮤니티 센터 번들과 병행 가능하나, 회원 시 조자 루트 보상이 열립니다.)'));
+
+    if (!S.flags.joja)
+    {
+        var br = el('div', 'listRow');
+        var btx = el('div', 'tx');
+        btx.innerHTML = '<b>조자 회원권</b>';
+        btx.appendChild(el('small', '', '5,000G · 번들 대안 해금'));
+        br.appendChild(btx);
+        var bb = el('button', 'btn small green', '가입');
+        bb.onclick = function ()
+        {
+            if (S.gold < 5000)
+            {
+                toast('골드가 부족해요.');
+                return;
+            }
+            S.gold -= 5000;
+            S.flags.joja = true;
+            give('joja_member', 1);
+            sfx('coin');
+            modalMsg('조자 회원', '모리스가 악수를 청합니다.\n이제 조자 프로젝트로 마을을 복구할 수 있어요.');
+            closeModal();
+        };
+        br.appendChild(bb);
+        m.body.appendChild(br);
+    }
+
+    // daily cola
+    var cr = el('div', 'listRow');
+    var ctx = el('div', 'tx');
+    ctx.innerHTML = '<b>조자 콜라</b>';
+    ctx.appendChild(el('small', '', '75G'));
+    cr.appendChild(ctx);
+    var cb = el('button', 'btn small', '사기');
+    cb.onclick = function ()
+    {
+        if (S.gold < 75)
+        {
+            toast('골드가 부족해요.');
+            return;
+        }
+        S.gold -= 75;
+        give('joja_cola', 1);
+        sfx('coin');
+        toast('조자 콜라!');
+    };
+    cr.appendChild(cb);
+    m.body.appendChild(cr);
+
+    if (S.flags.joja)
+    {
+        m.body.appendChild(el('div', 'sectionTitle', '마을 복구 프로젝트'));
+        var i;
+        for (i = 0; i < JOJA_UNLOCKS.length; i++)
+        {
+            (function (u)
+            {
+                var done = u.flag ? S.flags[u.flag] : (u.id === 'paving' ? S.flags.jojaPave : false);
+                if (u.id === 'movie')
+                {
+                    done = S.flags.theater;
+                }
+                var row = el('div', 'listRow');
+                var tx = el('div', 'tx');
+                tx.innerHTML = '<b>' + u.name + '</b>';
+                tx.appendChild(el('small', '', done ? '완료' : (u.cost.toLocaleString() + 'G')));
+                row.appendChild(tx);
+                if (!done)
+                {
+                    var b = el('button', 'btn small green', '후원');
+                    b.onclick = function ()
+                    {
+                        if (S.gold < u.cost)
+                        {
+                            toast('골드가 부족해요.');
+                            return;
+                        }
+                        S.gold -= u.cost;
+                        if (u.reward)
+                        {
+                            applyRoomReward(u.reward);
+                        }
+                        if (u.flag)
+                        {
+                            S.flags[u.flag] = true;
+                        }
+                        if (u.id === 'paving')
+                        {
+                            S.flags.jojaPave = true;
+                            var k;
+                            for (k in S.npc)
+                            {
+                                if (S.npc.hasOwnProperty(k))
+                                {
+                                    S.npc[k].pts += 250;
+                                }
+                            }
+                        }
+                        if (u.id === 'movie')
+                        {
+                            S.flags.theater = true;
+                            ensureTheaterBuilding();
+                        }
+                        sfx('bundle');
+                        modalMsg('조자 프로젝트', u.name + ' 완료!\n골드로 효율을 샀습니다.');
+                        closeModal();
+                        openJoja();
+                    };
+                    row.appendChild(b);
+                }
+                m.body.appendChild(row);
+            })(JOJA_UNLOCKS[i]);
+        }
+    }
+    openModal(m);
+}
+
+// ---------- Fish pond ----------
+
+var POND_PRODUCT = {
+    carp: { id: 'roe', days: 3, n: 1 },
+    sardine: { id: 'roe', days: 3, n: 1 },
+    tuna: { id: 'roe', days: 4, n: 2 },
+    salmon: { id: 'roe', days: 4, n: 2 },
+    sturgeon: { id: 'roe', days: 5, n: 2 },
+    legend: { id: 'aged_roe', days: 7, n: 1 },
+    lava_eel: { id: 'roe', days: 5, n: 3 },
+    pufferfish: { id: 'roe', days: 4, n: 1 },
+    super_cucumber: { id: 'roe', days: 5, n: 2 }
+};
+
+function openFishPond(o)
+{
+    var m = modalShell('🐟 어항');
+    if (!o.fish)
+    {
+        m.body.appendChild(el('div', 'hint', '물고기를 한 마리 넣으면 며칠 뒤 어란이 나옵니다.'));
+        var i, any = false;
+        for (i = 0; i < S.invSize; i++)
+        {
+            (function (idx)
+            {
+                var sl = S.inv[idx];
+                if (!sl || !ITEMS[sl.id] || ITEMS[sl.id].kind !== 'fish')
+                {
+                    return;
+                }
+                if (sl.id === 'trash')
+                {
+                    return;
+                }
+                any = true;
+                var row = el('div', 'listRow');
+                var ic = el('div', 'ic');
+                ic.appendChild(cvOf(itemIcon(sl.id, 30), 30));
+                row.appendChild(ic);
+                var tx = el('div', 'tx');
+                tx.innerHTML = '<b>' + ITEMS[sl.id].name + '</b>';
+                row.appendChild(tx);
+                var b = el('button', 'btn small green', '넣기');
+                b.onclick = function ()
+                {
+                    var fid = sl.id;
+                    removeItem(fid, 1, sl.q);
+                    o.fish = fid;
+                    o.days = 0;
+                    o.out = null;
+                    o.pop = 1;
+                    sfx('fish');
+                    toast(ITEMS[fid].name + '을(를) 넣었어요.');
+                    closeModal();
+                    openFishPond(o);
+                };
+                row.appendChild(b);
+                m.body.appendChild(row);
+            })(i);
+        }
+        if (!any)
+        {
+            m.body.appendChild(el('div', 'hint', '가방에 물고기가 없어요.'));
+        }
+    }
+    else
+    {
+        var prod = POND_PRODUCT[o.fish] || { id: 'roe', days: 4, n: 1 };
+        m.body.appendChild(el('div', 'hint',
+            '사육 중: ' + ITEMS[o.fish].name + ' ×' + (o.pop || 1) +
+            '\n진행: ' + (o.days || 0) + '/' + prod.days + '일'));
+        if (o.out)
+        {
+            var b2 = el('button', 'btn green', '수확 (' + ITEMS[o.out.id].name + ' ×' + o.out.n + ')');
+            b2.onclick = function ()
+            {
+                give(o.out.id, o.out.n);
+                o.out = null;
+                o.days = 0;
+                sfx('coin');
+                closeModal();
+                openFishPond(o);
+            };
+            m.body.appendChild(b2);
+        }
+        var empty = el('button', 'btn gray', '비우기 (물고기 회수)');
+        empty.onclick = function ()
+        {
+            give(o.fish, 1);
+            o.fish = null;
+            o.out = null;
+            o.days = 0;
+            toast('물고기를 꺼냈어요.');
+            closeModal();
+        };
+        m.body.appendChild(empty);
+    }
+    openModal(m);
+}
+
+function tickFishPonds()
+{
+    var mid, i;
+    for (mid in MAP_CACHE)
+    {
+        if (!MAP_CACHE.hasOwnProperty(mid))
+        {
+            continue;
+        }
+        var m = MAP_CACHE[mid];
+        for (i = 0; i < m.objects.length; i++)
+        {
+            var o = m.objects[i];
+            if (o.kind !== 'fishpond' || !o.fish || o.out)
+            {
+                continue;
+            }
+            o.days = (o.days || 0) + 1;
+            var prod = POND_PRODUCT[o.fish] || { id: 'roe', days: 4, n: 1 };
+            if (o.days >= prod.days)
+            {
+                o.out = { id: prod.id, n: prod.n };
+                o.days = 0;
+            }
+        }
+    }
+}
+
+// ---------- Casino ----------
+
+MAPS.desert.b = MAPS.desert.b || [];
+MAPS.desert.b.push({
+    kind: 'cabin', x: 36, y: 14, tw: 4, th: 4, door: 2, warp: 'casino', sign: '카지노', locked: 'bus'
+});
+
+INTERIORS.casino = {
+    name: '오아시스 카지노', w: 18, h: 12, floor: T_CARPET, floorCol: '#3a2040', wall: '#5a3060', paper: 'floral',
+    rugs: [{ c: 'purple', x: 7, y: 7 }],
+    f: [{ k: 'counter', x: 8, y: 3 }, { k: 'table', x: 3, y: 6 }, { k: 'table', x: 13, y: 6 },
+        { k: 'lamp', x: 2, y: 2 }, { k: 'lamp', x: 15, y: 2 }, { k: 'orb', x: 8, y: 7 },
+        { k: 'window', x: 5, y: 1 }, { k: 'window', x: 12, y: 1 }],
+    casino: true, npc: { id: 'mrqi', x: 9, y: 5 },
+    exit: { x: 9, y: 11, to: 'desert', tx: 38, ty: 19 }
+};
+
+NPCS.push({
+    id: 'mrqi', name: 'Mr. 치', gender: 'm', bd: { s: 'winter', d: 1 },
+    look: { skin: '#f0d8b0', hair: '#f0f0f0', hairStyle: 'short', shirt: '#202028', pants: '#101018',
+        hat: { style: 'fedora', col: '#202028' } },
+    loves: ['qi_gem', 'prismatic_shard'], likes: ['diamond', 'iridium_bar'],
+    sch: [[6, 'casino', 9, 5], [24, 'casino', 9, 5]],
+    lines: ['...', '치 코인을 모아 보거라.', '운도 실력의 일부지.', '섬에도 내 방이 있다... 언젠가.']
+});
+if (typeof registerNpc === 'function')
+{
+    registerNpc(NPCS[NPCS.length - 1]);
+}
+
+var QI_SHOP = [
+    { id: 'mega_bomb', price: 20 },
+    { id: 'iridium_ore', price: 30 },
+    { id: 'battery_pack', price: 40 },
+    { id: 'omni_geode', price: 15 },
+    { id: 'warp_totem', price: 25 },
+    { id: 'qi_gem', price: 100 },
+    { id: 'hat_wizard', price: 50 },
+    { id: 'stardrop', price: 200 }
+];
+
+function openCasino()
+{
+    S.qiCoins = S.qiCoins || 0;
+    var m = modalShell('🎰 카지노');
+    m.body.appendChild(el('div', 'hint', '치 코인: ' + S.qiCoins +
+        '\n슬롯 1회 = 10코인. 골드로 코인 교환 가능 (100G = 10코인).'));
+
+    var ex = el('button', 'btn', '코인 교환 (100G → 10)');
+    ex.onclick = function ()
+    {
+        if (S.gold < 100)
+        {
+            toast('골드가 부족해요.');
+            return;
+        }
+        S.gold -= 100;
+        S.qiCoins += 10;
+        sfx('coin');
+        closeModal();
+        openCasino();
+    };
+    m.body.appendChild(ex);
+
+    var slot = el('button', 'btn green', '슬롯 돌리기 (10 코인)');
+    slot.onclick = function ()
+    {
+        if (S.qiCoins < 10)
+        {
+            toast('치 코인이 부족해요.');
+            return;
+        }
+        S.qiCoins -= 10;
+        var r = Math.random();
+        var win = 0;
+        if (r < 0.02)
+        {
+            win = 100;
+        }
+        else if (r < 0.08)
+        {
+            win = 40;
+        }
+        else if (r < 0.25)
+        {
+            win = 15;
+        }
+        else if (r < 0.45)
+        {
+            win = 5;
+        }
+        S.qiCoins += win;
+        S.stats.casinoPlays = (S.stats.casinoPlays || 0) + 1;
+        sfx(win > 0 ? 'level' : 'menu');
+        modalMsg('슬롯', win > 0 ? ('🎉 ' + win + ' 코인 당첨!') : '꽝... 다시 도전?');
+        closeModal();
+    };
+    m.body.appendChild(slot);
+
+    // simple high-low
+    var hl = el('button', 'btn', '하이&로 (5 코인)');
+    hl.onclick = function ()
+    {
+        if (S.qiCoins < 5)
+        {
+            toast('치 코인이 부족해요.');
+            return;
+        }
+        S.qiCoins -= 5;
+        var card = 1 + Math.floor(Math.random() * 13);
+        modalChoice('카드: ' + card, '다음 카드가 높을까요, 낮을까요?', [
+            { t: '높다', cls: 'green', cb: function ()
+            {
+                var n2 = 1 + Math.floor(Math.random() * 13);
+                closeModal();
+                if (n2 > card)
+                {
+                    S.qiCoins += 12;
+                    modalMsg('하이&로', '다음 ' + n2 + '! 승리 +12 코인');
+                }
+                else
+                {
+                    modalMsg('하이&로', '다음 ' + n2 + '... 패배');
+                }
+            } },
+            { t: '낮다', cls: '', cb: function ()
+            {
+                var n2 = 1 + Math.floor(Math.random() * 13);
+                closeModal();
+                if (n2 < card)
+                {
+                    S.qiCoins += 12;
+                    modalMsg('하이&로', '다음 ' + n2 + '! 승리 +12 코인');
+                }
+                else
+                {
+                    modalMsg('하이&로', '다음 ' + n2 + '... 패배');
+                }
+            } }
+        ]);
+    };
+    m.body.appendChild(hl);
+
+    m.body.appendChild(el('div', 'sectionTitle', '치 상점'));
+    var i;
+    for (i = 0; i < QI_SHOP.length; i++)
+    {
+        (function (st)
+        {
+            var it = ITEMS[st.id];
+            if (!it)
+            {
+                return;
+            }
+            var row = el('div', 'listRow');
+            var ic = el('div', 'ic');
+            ic.appendChild(cvOf(itemIcon(st.id, 30), 30));
+            row.appendChild(ic);
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + it.name + '</b>';
+            tx.appendChild(el('small', '', st.price + ' 치 코인'));
+            row.appendChild(tx);
+            var b = el('button', 'btn small', '교환');
+            b.onclick = function ()
+            {
+                if (S.qiCoins < st.price)
+                {
+                    toast('치 코인이 부족해요.');
+                    return;
+                }
+                if (st.id === 'stardrop' && S.flags.sd_casino)
+                {
+                    toast('이미 받았어요.');
+                    return;
+                }
+                S.qiCoins -= st.price;
+                if (st.id === 'stardrop')
+                {
+                    S.flags.sd_casino = true;
+                }
+                give(st.id, 1);
+                sfx('coin');
+                toast(it.name + '!');
+                closeModal();
+                openCasino();
+            };
+            row.appendChild(b);
+            m.body.appendChild(row);
+        })(QI_SHOP[i]);
+    }
+    openModal(m);
+}
+
+// ---------- Movie theater ----------
+
+var MOVIES = [
+    { id: 'adventure', name: '모험 영화', loves: ['abigail', 'sam', 'sebastian', 'maru'], days: 'any' },
+    { id: 'romance', name: '로맨스 영화', loves: ['haley', 'emily', 'elliott', 'penny'], days: 'any' },
+    { id: 'nature', name: '자연 다큐', loves: ['leah', 'harvey', 'linus', 'demetrius'], days: 'any' },
+    { id: 'comedy', name: '코미디', loves: ['alex', 'shane', 'gus', 'lewis'], days: 'any' }
+];
+
+function ensureTheaterBuilding()
+{
+    var has = false, i;
+    for (i = 0; i < MAPS.town.b.length; i++)
+    {
+        if (MAPS.town.b[i].warp === 'theater')
+        {
+            has = true;
+        }
+    }
+    if (!has)
+    {
+        MAPS.town.b.push({
+            kind: 'saloon', x: 36, y: 30, tw: 6, th: 5, door: 3, warp: 'theater', sign: '영화관'
+        });
+    }
+    if (MAP_CACHE.town)
+    {
+        delete MAP_CACHE.town;
+    }
+    // rebuild live town map so the theater door appears without re-entering
+    if (typeof S !== 'undefined' && S && S.map === 'town' && typeof loadMap === 'function')
+    {
+        var px = S.px, py = S.py;
+        MAP = loadMap('town');
+        S.px = px;
+        S.py = py;
+        if (typeof rebuildActors === 'function')
+        {
+            rebuildActors();
+        }
+    }
+}
+
+// unlock theater via center complete or joja movie project or year 2 fall
+INTERIORS.theater = {
+    name: '별밤 영화관', w: 18, h: 12, floor: T_CARPET, floorCol: '#4a3040', wall: '#3a2838', paper: 'stripe',
+    rugs: [{ c: 'red', x: 7, y: 8 }],
+    f: [{ k: 'counter', x: 8, y: 3 }, { k: 'stool', x: 4, y: 6 }, { k: 'stool', x: 6, y: 6 },
+        { k: 'stool', x: 10, y: 6 }, { k: 'stool', x: 12, y: 6 }, { k: 'painting', x: 2, y: 1 },
+        { k: 'lamp', x: 2, y: 8 }, { k: 'lamp', x: 15, y: 8 }, { k: 'window', x: 14, y: 1 }],
+    theater: true,
+    exit: { x: 9, y: 11, to: 'town', tx: 39, ty: 36 }
+};
+
+function theaterUnlocked()
+{
+    return !!(S.flags.theater || S.flags.centerDone || (S.year >= 2 && S.season >= 2));
+}
+
+function openTheater()
+{
+    if (!theaterUnlocked())
+    {
+        toast('영화관이 아직 문을 열지 않았어요.');
+        return;
+    }
+    S.flags.theater = true;
+    ensureTheaterBuilding();
+    var m = modalShell('🎬 영화관');
+    m.body.appendChild(el('div', 'hint', '티켓 1,000G. 함께 볼 사람을 고르면 호감도가 오릅니다. (하루 1회)'));
+    if (S.flags.movieDay === S.year + '-' + S.season + '-' + S.day)
+    {
+        m.body.appendChild(el('div', 'hint', '오늘은 이미 영화를 봤어요.'));
+        openModal(m);
+        return;
+    }
+    var i;
+    for (i = 0; i < MOVIES.length; i++)
+    {
+        (function (mv)
+        {
+            var row = el('div', 'listRow');
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + mv.name + '</b>';
+            tx.appendChild(el('small', '', '1,000G'));
+            row.appendChild(tx);
+            var b = el('button', 'btn small green', '보기');
+            b.onclick = function ()
+            {
+                pickMovieGuest(mv);
+            };
+            row.appendChild(b);
+            m.body.appendChild(row);
+        })(MOVIES[i]);
+    }
+    openModal(m);
+}
+
+function pickMovieGuest(mv)
+{
+    closeModal();
+    var m = modalShell('🎬 ' + mv.name + ' — 누구와?');
+    var alone = el('button', 'btn', '혼자 보기');
+    alone.onclick = function ()
+    {
+        watchMovie(mv, null);
+    };
+    m.body.appendChild(alone);
+    var i;
+    for (i = 0; i < NPCS.length; i++)
+    {
+        (function (d)
+        {
+            if (!S.npc[d.id] || !S.npc[d.id].met)
+            {
+                return;
+            }
+            var row = el('div', 'listRow');
+            var tx = el('div', 'tx');
+            tx.innerHTML = '<b>' + d.name + '</b>';
+            var love = mv.loves.indexOf(d.id) >= 0;
+            tx.appendChild(el('small', '', love ? '이 영화 좋아함!' : '초대'));
+            row.appendChild(tx);
+            var b = el('button', 'btn small', '초대');
+            b.onclick = function ()
+            {
+                watchMovie(mv, d.id);
+            };
+            row.appendChild(b);
+            m.body.appendChild(row);
+        })(NPCS[i]);
+    }
+    openModal(m);
+}
+
+function watchMovie(mv, guestId)
+{
+    if (S.gold < 1000)
+    {
+        toast('골드가 부족해요. (1,000G)');
+        return;
+    }
+    S.gold -= 1000;
+    S.flags.movieDay = S.year + '-' + S.season + '-' + S.day;
+    S.stats.movies = (S.stats.movies || 0) + 1;
+    closeModal();
+    var msg = '🎞️ ' + mv.name + '을(를) 봤어요.\n재미있는 시간이었습니다.';
+    if (guestId)
+    {
+        var love = mv.loves.indexOf(guestId) >= 0;
+        var pts = love ? 500 : 200;
+        addFriend(guestId, pts);
+        msg += '\n\n' + NPC_BY_ID[guestId].name + '와(과) 함께! 호감 +' + (pts / 250) + '♥';
+    }
+    S.energy = Math.min(S.maxEnergy, S.energy + 40);
+    sfx('level');
+    modalMsg('영화 끝', msg);
+}
+
+// ---------- Ginger Island ----------
+
+MAPS.beach.obj.push({ kind: 'boat', x: 8, y: 14 });
+MAPS.beach.obj.push({ kind: 'sign', x: 9, y: 14, text: '섬행 부두' });
+
+MAPS.island = {
+    name: '진저 섬 남쪽', w: 40, h: 32, ground: T_SAND, outdoor: true, fish: 'ocean',
+    r: [
+        { x: 0, y: 0, w: 40, h: 2, t: T_CLIFF },
+        { x: 0, y: 0, w: 2, h: 32, t: T_CLIFF },
+        { x: 0, y: 30, w: 40, h: 2, t: T_CLIFF },
+        { x: 38, y: 0, w: 2, h: 32, t: T_CLIFF },
+        { x: 4, y: 4, w: 14, h: 12, t: T_GRASS },
+        { x: 20, y: 18, w: 14, h: 8, t: T_WATER },
+        { x: 22, y: 20, w: 10, h: 4, t: T_DEEP },
+        { x: 16, y: 4, w: 3, h: 14, t: T_PATH },
+        { x: 18, y: 14, w: 12, h: 2, t: T_PATH }
+    ],
+    b: [
+        { kind: 'shop3', x: 6, y: 6, tw: 5, th: 5, door: 2, warp: 'island_trader', sign: '섬 상점' }
+    ],
+    obj: [
+        { kind: 'sign', x: 18, y: 5, text: '진저 섬' },
+        { kind: 'boat', x: 30, y: 26 },
+        { kind: 'walnut', x: 10, y: 16 },
+        { kind: 'walnut', x: 24, y: 8 },
+        { kind: 'walnut', x: 32, y: 12 },
+        { kind: 'walnut', x: 8, y: 22 },
+        { kind: 'walnut', x: 28, y: 6 }
+    ],
+    wp: [
+        { x: 16, y: 0, w: 6, h: 1, to: 'island_north', tx: 18, ty: 28 },
+        { x: 0, y: 14, w: 1, h: 5, to: 'island_west', tx: 34, ty: 16 }
+    ],
+    till: [{ x: 6, y: 18, w: 10, h: 8 }],
+    sc: [
+        { kind: 'tree', n: 18 },
+        { kind: 'stone', n: 12 },
+        { kind: 'weed', n: 16 },
+        { kind: 'grass', n: 40 },
+        { kind: 'flower', n: 20 },
+        { kind: 'cactus', n: 6 }
+    ]
+};
+
+MAPS.island_west = {
+    name: '진저 섬 서쪽 (농장)', w: 38, h: 30, ground: T_GRASS, outdoor: true, fish: 'lake',
+    r: [
+        { x: 0, y: 0, w: 38, h: 2, t: T_CLIFF },
+        { x: 0, y: 0, w: 2, h: 30, t: T_CLIFF },
+        { x: 0, y: 28, w: 38, h: 2, t: T_CLIFF },
+        { x: 36, y: 0, w: 2, h: 30, t: T_CLIFF },
+        { x: 8, y: 8, w: 20, h: 14, t: T_DIRT },
+        { x: 4, y: 4, w: 8, h: 6, t: T_WATER },
+        { x: 28, y: 12, w: 3, h: 10, t: T_PATH }
+    ],
+    b: [],
+    obj: [
+        { kind: 'sign', x: 18, y: 6, text: '섬 농장' },
+        { kind: 'bin', x: 20, y: 7 },
+        { kind: 'walnut', x: 6, y: 14 },
+        { kind: 'walnut', x: 30, y: 8 },
+        { kind: 'walnut', x: 12, y: 22 },
+        { kind: 'walnut', x: 24, y: 20 }
+    ],
+    wp: [{ x: 37, y: 14, w: 1, h: 5, to: 'island', tx: 2, ty: 16 }],
+    till: [{ x: 8, y: 8, w: 20, h: 14 }],
+    sc: [
+        { kind: 'tree', n: 12 },
+        { kind: 'stone', n: 10 },
+        { kind: 'grass', n: 50 },
+        { kind: 'weed', n: 12 }
+    ]
+};
+
+MAPS.island_north = {
+    name: '진저 섬 북쪽', w: 36, h: 32, ground: T_DIRT, outdoor: true, fish: 'lake',
+    r: [
+        { x: 0, y: 0, w: 36, h: 2, t: T_CLIFF },
+        { x: 0, y: 0, w: 2, h: 32, t: T_CLIFF },
+        { x: 0, y: 30, w: 36, h: 2, t: T_CLIFF },
+        { x: 34, y: 0, w: 2, h: 32, t: T_CLIFF },
+        { x: 10, y: 4, w: 16, h: 10, t: T_CLIFF },
+        { x: 14, y: 12, w: 8, h: 4, t: T_PATH },
+        { x: 16, y: 14, w: 4, h: 12, t: T_PATH }
+    ],
+    b: [],
+    obj: [
+        { kind: 'volcano_entrance', x: 16, y: 8 },
+        { kind: 'sign', x: 18, y: 16, text: '↑ 화산' },
+        { kind: 'walnut', x: 6, y: 20 },
+        { kind: 'walnut', x: 28, y: 18 },
+        { kind: 'walnut', x: 8, y: 10 },
+        { kind: 'walnut', x: 26, y: 6 },
+        { kind: 'walnut', x: 20, y: 24 }
+    ],
+    wp: [{ x: 14, y: 31, w: 8, h: 1, to: 'island', tx: 18, ty: 2 }],
+    sc: [
+        { kind: 'stone', n: 40 },
+        { kind: 'tree', n: 8 },
+        { kind: 'weed', n: 10 }
+    ]
+};
+
+INTERIORS.island_trader = {
+    name: '섬 상인', w: 14, h: 10, floor: T_WOOD, floorCol: '#c8a060', wall: '#d8c090', paper: 'plank',
+    f: [{ k: 'counter', x: 6, y: 3 }, { k: 'goods', x: 2, y: 2 }, { k: 'crate', x: 11, y: 6 },
+        { k: 'window', x: 4, y: 1 }, { k: 'plant', x: 11, y: 2 }],
+    shop: 'island_trader', npc: { id: 'islander', x: 7, y: 5 },
+    exit: { x: 7, y: 9, to: 'island', tx: 8, ty: 12 }
+};
+
+SHOPS.island_trader = {
+    name: '섬 상인', npc: 'islander',
+    stock: [
+        { id: 'pineapple_seeds', price: 400 },
+        { id: 'taro_seeds', price: 40 },
+        { id: 'banana', price: 300 },
+        { id: 'mango', price: 250 },
+        { id: 'ginger', price: 100 },
+        { id: 'cinder_shard', price: 200 },
+        { id: 'island_warp', price: 1000 },
+        { id: 'warp_totem', price: 500 }
+    ]
+};
+
+NPCS.push({
+    id: 'islander', name: '레오', gender: 'm', bd: { s: 'summer', d: 26 },
+    look: { skin: '#8a5a3a', hair: '#2a2a2a', hairStyle: 'spiky', shirt: '#48a868', pants: '#3a5a3a' },
+    loves: ['mango', 'banana', 'pomegranate'], likes: ['coconut', 'duck_feather'],
+    sch: [[6, 'island_trader', 7, 5], [14, 'island', 20, 10], [20, 'island_trader', 7, 5]],
+    lines: ['섬에 온 거야? 반가워!', '황금 호두를 모아 봐. 비밀이 열려.',
+        '화산은 위험해. 조심해!', '앵무새가 내 친구야.']
+});
+if (typeof registerNpc === 'function')
+{
+    registerNpc(NPCS[NPCS.length - 1]);
+}
+
+function walnutCount()
+{
+    return S.walnuts || 0;
+}
+
+function openBoat()
+{
+    if (S.map === 'beach')
+    {
+        if (!S.flags.boat)
+        {
+            modalChoice('⛵ 부두',
+                '낡은 배입니다. 윌리가 수리를 제안합니다.\n수리비 25,000G' +
+                (S.flags.centerDone || S.flags.joja ? ' (할인 가능)' : ''),
+                [
+                    { t: '수리한다 (25,000G)', cls: 'green', cb: function ()
+                    {
+                        var cost = (S.flags.centerDone || S.flags.joja) ? 20000 : 25000;
+                        if (S.gold < cost)
+                        {
+                            toast('골드가 부족해요.');
+                            closeModal();
+                            return;
+                        }
+                        S.gold -= cost;
+                        S.flags.boat = true;
+                        give('boat_ticket', 1);
+                        closeModal();
+                        modalMsg('보트 수리', '이제 진저 섬으로 갈 수 있어요!');
+                    } },
+                    { t: '다음에', cls: 'gray', cb: closeModal }
+                ]);
+            return;
+        }
+        modalChoice('⛵ 진저 섬', '섬으로 출발할까요?', [
+            { t: '출발!', cls: 'green', cb: function ()
+            {
+                closeModal();
+                fadeOut(function ()
+                {
+                    MAP = loadMap('island');
+                    S.map = 'island';
+                    S.px = 30 * TILE + HALF;
+                    S.py = 24 * TILE + HALF;
+                    toast('진저 섬에 도착!');
+                });
+            } },
+            { t: '취소', cls: 'gray', cb: closeModal }
+        ]);
+    }
+    else
+    {
+        // return to beach
+        modalChoice('⛵ 본토로', '해변으로 돌아갈까요?', [
+            { t: '돌아간다', cls: 'green', cb: function ()
+            {
+                closeModal();
+                fadeOut(function ()
+                {
+                    MAP = loadMap('beach');
+                    S.map = 'beach';
+                    S.px = 10 * TILE + HALF;
+                    S.py = 14 * TILE + HALF;
+                });
+            } },
+            { t: '취소', cls: 'gray', cb: closeModal }
+        ]);
+    }
+}
+
+function walnutKey(o)
+{
+    return (S.map || '') + ':' + o.x + ',' + o.y;
+}
+
+function collectWalnut(o)
+{
+    S.flags.walnutsTaken = S.flags.walnutsTaken || {};
+    var key = walnutKey(o);
+    if (o.taken || S.flags.walnutsTaken[key])
+    {
+        o.taken = true;
+        toast('이미 주운 호두예요.');
+        return;
+    }
+    o.taken = true;
+    S.flags.walnutsTaken[key] = 1;
+    S.walnuts = (S.walnuts || 0) + 1;
+    give('golden_walnut', 1);
+    sfx('bundle');
+    toast('황금 호두! (총 ' + S.walnuts + '개)');
+    // rewards at thresholds
+    if (S.walnuts === 5 && !S.flags.walnut5)
+    {
+        S.flags.walnut5 = true;
+        give('pineapple_seeds', 5);
+        modalMsg('호두 보상', '호두 5개! 파인애플 씨앗을 얻었어요.');
+    }
+    if (S.walnuts === 10 && !S.flags.walnut10)
+    {
+        S.flags.walnut10 = true;
+        give('banana', 3);
+        give('mango', 3);
+        modalMsg('호두 보상', '호두 10개! 열대 과일을 얻었어요.');
+    }
+    if (S.walnuts === 20 && !S.flags.walnut20)
+    {
+        S.flags.walnut20 = true;
+        if (typeof giveStardropOnce === 'function')
+        {
+            giveStardropOnce('island');
+        }
+        else
+        {
+            give('stardrop', 1);
+        }
+        modalMsg('호두 보상', '호두 20개! 섬의 축복 — 스타드롭!');
+    }
+}
+
+// ---------- Volcano dungeon ----------
+
+MONSTERS.magma_sprite = {
+    name: '마그마 정령', hp: 100, dmg: 18, speed: .7, xp: 14, minFloor: 1, maxFloor: 999,
+    sprite: 'dust', col: ['#e05030', '#802010', '#f09050'], drops: ['cinder_shard', 'coal']
+};
+MONSTERS.dwarvish_sentry = {
+    name: '드워프 보초', hp: 180, dmg: 26, speed: .5, xp: 22, minFloor: 4, maxFloor: 999,
+    sprite: 'skeleton', col: ['#c87040', '#884020', '#e8a070'], drops: ['cinder_shard', 'bone_frag']
+};
+MONSTERS.false_magma = {
+    name: '가짜 마그마 캡', hp: 250, dmg: 30, speed: .55, xp: 30, minFloor: 7, maxFloor: 999,
+    sprite: 'slime', col: ['#e06828', '#903818', '#f0a060'], drops: ['cinder_shard', 'iridium_ore']
+};
+
+function enterVolcano(floor)
+{
+    MINE.skull = false;
+    MINE.volcano = true;
+    MINE.floor = floor;
+    var m = genMineFloor(floor);
+    m.name = '화산 던전 ' + floor + '층';
+    m.volcano = true;
+    // tint-ish: more ore as cinder
+    MAP_CACHE.mine = m;
+    MAP = m;
+    S.map = 'mine';
+    S.volcanoFloor = floor;
+    if (floor > (S.volcanoDeep || 0))
+    {
+        S.volcanoDeep = floor;
+    }
+    S.px = m.entry.x * TILE + HALF;
+    S.py = m.entry.y * TILE + HALF;
+    toast('화산 ' + floor + '층');
+    if (floor >= 10 && !S.flags.volcanoTop)
+    {
+        S.flags.volcanoTop = true;
+        give('dragon_tooth', 1);
+        give('cinder_shard', 10);
+        give('iridium_bar', 3);
+        modalMsg('🌋 화산 정상', '용의 이빨과 잿더미 파편을 손에 넣었어요!\n섬 토템 재료가 모입니다.');
+    }
+}
+
+function leaveVolcano()
+{
+    MINE.volcano = false;
+    MINE.mobs = [];
+    delete MAP_CACHE.mine;
+    MAP = loadMap('island_north');
+    S.map = 'island_north';
+    S.px = 18 * TILE + HALF;
+    S.py = 12 * TILE + HALF;
+}
+
+// ---------- Multiplayer note ----------
+
+function lateMultiplayerNote()
+{
+    modalMsg('멀티플레이',
+        '별밤 농장은 의존성 없는 단일 HTML · 오프라인 저장 구조입니다.\n\n' +
+        '실시간 멀티플레이에는 서버·동기화·충돌 해결이 필요해\n' +
+        '현재 아키텍처에서는 지원하지 않습니다.\n\n' +
+        '세이브 코드(STARRY1.)로 기기 간 이어하기는 가능합니다.');
+}
+
+// ---------- interact / draw / day hooks ----------
+
+function lateInteract(o)
+{
+    if (!o)
+    {
+        return false;
+    }
+    if (o.kind === 'boat')
+    {
+        openBoat();
+        return true;
+    }
+    if (o.kind === 'walnut')
+    {
+        collectWalnut(o);
+        return true;
+    }
+    if (o.kind === 'volcano_entrance')
+    {
+        modalChoice('🌋 화산', '뜨거운 동굴입니다. 내려갈까요?\n최고: ' + (S.volcanoDeep || 0) + '층', [
+            { t: '들어간다', cls: 'red', cb: function ()
+            {
+                closeModal();
+                fadeOut(function ()
+                {
+                    enterVolcano(1);
+                });
+            } },
+            { t: '그만', cls: 'gray', cb: closeModal }
+        ]);
+        return true;
+    }
+    if (o.kind === 'fishpond')
+    {
+        openFishPond(o);
+        return true;
+    }
+    return false;
+}
+
+function lateDrawObject(g, o, x, y, tick)
+{
+    if (o.kind === 'boat')
+    {
+        pr(g, x + 2, y + 12, 28, 10, '#6a4a28');
+        pr(g, x + 4, y + 6, 24, 10, '#c8a060');
+        pr(g, x + 14, y - 2, 4, 12, '#e8e0d0');
+        return true;
+    }
+    if (o.kind === 'walnut')
+    {
+        if (S && S.flags && S.flags.walnutsTaken && typeof walnutKey === 'function' &&
+            S.flags.walnutsTaken[walnutKey(o)])
+        {
+            o.taken = true;
+        }
+        if (o.taken)
+        {
+            return true;
+        }
+        pr(g, x + 10, y + 12, 12, 10, '#d8a020');
+        pr(g, x + 12, y + 10, 8, 4, '#f8e060');
+        drawSparkle(g, x + HALF, y + 8, tick);
+        return true;
+    }
+    if (o.kind === 'volcano_entrance')
+    {
+        pr(g, x - 4, y + 4, 40, 24, '#4a2820');
+        pr(g, x + 4, y + 8, 24, 16, '#1a1010');
+        pr(g, x + 10, y + 14, 12, 8, '#e05030');
+        drawSparkle(g, x + HALF, y + 10, tick);
+        return true;
+    }
+    if (o.kind === 'fishpond')
+    {
+        pr(g, x + 2, y + 8, 28, 18, '#3a6a8a');
+        pr(g, x + 4, y + 10, 24, 12, '#48a0c8');
+        pr(g, x + 2, y + 8, 28, 3, '#8ac8e8');
+        if (o.fish)
+        {
+            drawSparkle(g, x + HALF, y + 12, tick);
+        }
+        if (o.out)
+        {
+            drawSparkle(g, x + HALF, y + 4, tick);
+        }
+        return true;
+    }
+    return false;
+}
+
+function lateOnNewDay()
+{
+    tickFishPonds();
+    // auto-unlock theater building when eligible
+    if (theaterUnlocked() && !S.flags.theaterBuilt)
+    {
+        S.flags.theater = true;
+        S.flags.theaterBuilt = true;
+        ensureTheaterBuilding();
+    }
+    // island forage ginger
+    if (MAP_CACHE.island)
+    {
+        lateSpawnIslandForage(MAP_CACHE.island);
+    }
+}
+
+function lateSpawnIslandForage(m)
+{
+    var have = 0, i;
+    for (i = 0; i < m.objects.length; i++)
+    {
+        if (m.objects[i].kind === 'forage' && m.objects[i].island)
+        {
+            have++;
+        }
+    }
+    var want = 4 - have, tries = 0;
+    var pool = ['ginger', 'coconut', 'cactus_fruit', 'banana', 'mango'];
+    while (want > 0 && tries < 60)
+    {
+        tries++;
+        var x = 3 + Math.floor(Math.random() * (m.w - 6));
+        var y = 3 + Math.floor(Math.random() * (m.h - 6));
+        if (isSolid(m, x, y) || objAt(m, x, y))
+        {
+            continue;
+        }
+        m.objects.push({
+            kind: 'forage', x: x, y: y,
+            item: pool[Math.floor(Math.random() * pool.length)],
+            island: 1
+        });
+        want--;
+    }
+}
+
+function lateOnLoad()
+{
+    if (!S)
+    {
+        return;
+    }
+    if (S.qiCoins === undefined)
+    {
+        S.qiCoins = 0;
+    }
+    if (S.walnuts === undefined)
+    {
+        S.walnuts = 0;
+    }
+    if (S.volcanoDeep === undefined)
+    {
+        S.volcanoDeep = 0;
+    }
+    if (!S.flags)
+    {
+        S.flags = {};
+    }
+    if (!S.flags.walnutsTaken)
+    {
+        S.flags.walnutsTaken = {};
+    }
+    if (S.flags.theater || S.flags.centerDone)
+    {
+        ensureTheaterBuilding();
+        S.flags.theaterBuilt = true;
+    }
+    if (S.stats)
+    {
+        if (S.stats.casinoPlays === undefined)
+        {
+            S.stats.casinoPlays = 0;
+        }
+        if (S.stats.movies === undefined)
+        {
+            S.stats.movies = 0;
+        }
+    }
+    // if a save was mid-dungeon, force farmhouse (mine cache is not durable)
+    if (S.map === 'mine')
+    {
+        S.map = 'farmhouse';
+        S.px = 6 * TILE + HALF;
+        S.py = 9 * TILE + HALF;
+        if (typeof MINE !== 'undefined' && MINE)
+        {
+            MINE.mobs = [];
+            MINE.skull = false;
+            MINE.volcano = false;
+        }
+    }
+}
+
+function lateInteriorAction()
+{
+    if (!MAP || !MAP.interior)
+    {
+        return false;
+    }
+    // require standing near a counter/orb so walking around does not spam UI
+    var near = false;
+    if (typeof nearFurniture === 'function')
+    {
+        near = nearFurniture('counter', {
+            x: Math.floor(S.px / TILE),
+            y: Math.floor(S.py / TILE)
+        }) || nearFurniture('orb', {
+            x: Math.floor(S.px / TILE),
+            y: Math.floor(S.py / TILE)
+        });
+    }
+    else
+    {
+        near = true;
+    }
+    if (!near)
+    {
+        return false;
+    }
+    if (MAP.interior.joja)
+    {
+        openJoja();
+        return true;
+    }
+    if (MAP.interior.casino)
+    {
+        openCasino();
+        return true;
+    }
+    if (MAP.interior.theater)
+    {
+        openTheater();
+        return true;
+    }
+    return false;
+}
+
+// solid objects
+if (typeof OBJ_SOLID !== 'undefined')
+{
+    OBJ_SOLID.boat = 1;
+    OBJ_SOLID.walnut = 0;
+    OBJ_SOLID.volcano_entrance = 1;
+    OBJ_SOLID.fishpond = 1;
+}
 
 
 /* ===== festival.js ===== */
@@ -18477,6 +21516,15 @@ function itemActions(idx)
             UI.lastHudKey = '';
         } });
     }
+    if (sl.id === 'backpack' || sl.id === 'backpack2')
+    {
+        btns.push({ t: '🎒 사용', cls: 'green', cb: function ()
+        {
+            closeModal();
+            tryUseBackpack(sl.id);
+            UI.lastHudKey = '';
+        } });
+    }
     if (it.kind === 'hat')
     {
         btns.push({ t: '👒 쓰기', cls: 'green', cb: function ()
@@ -18886,6 +21934,33 @@ function addBuildRows(host)
     {
         host.appendChild(el('div', 'hint', '공사 중: ' + BUILDINGS[S.pendingBuild.kind].name + ' (' + S.pendingBuild.days + '일 남음)'));
         return;
+    }
+    // farmhouse upgrades (Wave 3)
+    if (typeof HOUSE_UPGRADES !== 'undefined' && houseLevel() < HOUSE_UPGRADES.length)
+    {
+        var hu = HOUSE_UPGRADES[houseLevel()];
+        var hrow = el('div', 'listRow');
+        var htx = el('div', 'tx');
+        htx.innerHTML = '<b>🏠 ' + hu.name + '</b>';
+        var hn = [];
+        var hk;
+        for (hk in hu.need)
+        {
+            if (hu.need.hasOwnProperty(hk))
+            {
+                hn.push(ITEMS[hk].name + ' ' + hu.need[hk]);
+            }
+        }
+        htx.appendChild(el('small', '', hu.cost + 'G + ' + hn.join(', ') + ' · ' + hu.desc));
+        hrow.appendChild(htx);
+        var hb = el('button', 'btn small green', '확장');
+        hb.onclick = function ()
+        {
+            tryBuyHouseUpgrade();
+            closeModal();
+        };
+        hrow.appendChild(hb);
+        host.appendChild(hrow);
     }
     var k;
     for (k in BUILDINGS)
@@ -19647,6 +22722,23 @@ function openMenu()
     };
     m.body.appendChild(sb);
 
+    m.body.appendChild(el('div', 'sectionTitle', '멀티플레이'));
+    var mp = el('button', 'btn small gray', '👥 멀티플레이 안내');
+    mp.style.width = '100%';
+    mp.onclick = function ()
+    {
+        closeModal();
+        if (typeof lateMultiplayerNote === 'function')
+        {
+            lateMultiplayerNote();
+        }
+        else
+        {
+            modalMsg('멀티플레이', '단일 HTML 오프라인 빌드에서는 네트워크 멀티를 지원하지 않습니다.');
+        }
+    };
+    m.body.appendChild(mp);
+
     m.body.appendChild(el('div', 'sectionTitle', '세이브 코드'));
     m.body.appendChild(el('div', 'hint', '다른 기기에서 이어하려면 코드를 복사해 두세요.'));
     var row = el('div');
@@ -20045,7 +23137,7 @@ function openMuseum()
                     }
                     else if (n === 20)
                     {
-                        reward = { id: 'diamond', n: 1 };
+                        reward = { id: 'stardrop', n: 1 };
                     }
                     else if (n === 30)
                     {
@@ -20053,8 +23145,27 @@ function openMuseum()
                     }
                     if (reward)
                     {
-                        give(reward.id, reward.n);
-                        toast('기증 보상: ' + ITEMS[reward.id].name);
+                        if (reward.id === 'stardrop')
+                        {
+                            if (typeof giveStardropOnce === 'function')
+                            {
+                                giveStardropOnce('museum20');
+                            }
+                            else
+                            {
+                                give('stardrop', 1);
+                            }
+                            toast('기증 보상: 스타드롭!');
+                        }
+                        else
+                        {
+                            give(reward.id, reward.n);
+                            toast('기증 보상: ' + ITEMS[reward.id].name);
+                        }
+                    }
+                    if (typeof checkStardropSources === 'function')
+                    {
+                        checkStardropSources();
                     }
                     sfx('bundle');
                     addFriend('gunther', 40);
@@ -20504,6 +23615,13 @@ function assertLoaded()
         ['TROPHIES', typeof TROPHIES !== 'undefined' && TROPHIES && TROPHIES.length > 0],
         ['ARTIFACTS', typeof ARTIFACTS !== 'undefined' && ARTIFACTS && ARTIFACTS.length > 0],
         ['desert map', typeof MAPS !== 'undefined' && MAPS && MAPS.desert],
+        ['gap maps', typeof MAPS !== 'undefined' && MAPS && MAPS.secret_woods && MAPS.railroad &&
+            typeof INTERIORS !== 'undefined' && INTERIORS.farm_cave && INTERIORS.spa],
+        ['gap items', typeof ITEMS !== 'undefined' && ITEMS && ITEMS.backpack && ITEMS.sprinkler_ir &&
+            ITEMS.crystalarium && ITEMS.cask],
+        ['HEART_EVENTS', typeof HEART_EVENTS !== 'undefined' && HEART_EVENTS && HEART_EVENTS.abigail],
+        ['late island', typeof MAPS !== 'undefined' && MAPS && MAPS.island && MAPS.island_north &&
+            typeof enterVolcano === 'function' && typeof openJoja === 'function'],
         ['FEST_DECOR', typeof FEST_DECOR !== 'undefined' && FEST_DECOR && FEST_DECOR.egg_hunt],
         // this one caught a silent failure: EDGE_PRI is declared in sprites.js but
         // keyed by constants from world.js, so building it too early produced a
@@ -20927,6 +24045,14 @@ function startPlay()
     if (S.goalIdx >= QUEST_CHAIN.length && !S.goalTarget)
     {
         rollEndlessGoal();
+    }
+    if (typeof gapOnLoad === 'function')
+    {
+        gapOnLoad();
+    }
+    if (typeof lateOnLoad === 'function')
+    {
+        lateOnLoad();
     }
     rebuildActors();
     UI.lastHudKey = '';
@@ -21378,7 +24504,14 @@ function checkWarp()
     }
     if (w.locked && !S.flags[w.locked])
     {
-        toast('아직 들어갈 수 없어요.');
+        if (w.locked === 'caveChoice')
+        {
+            toast('아직 동굴이 잠겨 있어요. (며칠 뒤 데메트리우스가 찾아옵니다)');
+        }
+        else
+        {
+            toast('아직 들어갈 수 없어요.');
+        }
         return;
     }
     UI.warping = true;
@@ -21490,13 +24623,18 @@ function doToolAction()
                 actFertilize(f, sl.id);
             }
             else if (MACHINES[sl.id] || sl.id === 'chest' || sl.id === 'scarecrow' ||
-                sl.id === 'sprinkler' || sl.id === 'sprinkler_q' || sl.id === 'torch')
+                sl.id === 'sprinkler' || sl.id === 'sprinkler_q' || sl.id === 'sprinkler_ir' ||
+                sl.id === 'fish_pond' || sl.id === 'torch')
             {
                 actPlace(f, sl.id);
             }
-            else if (sl.id === 'bomb')
+            else if (sl.id === 'bomb' || sl.id === 'mega_bomb')
             {
-                actBomb(f);
+                actBomb(f, sl.id === 'mega_bomb' ? 3 : 2);
+            }
+            else if (sl.id === 'island_warp' || sl.id === 'warp_totem' || sl.id === 'desert_totem')
+            {
+                actWarpTotem(sl.id);
             }
             else
             {
@@ -21802,9 +24940,25 @@ function actPick(f)
         sfx('hoe');
         return;
     }
-    if (o && (o.kind === 'machine' || o.kind === 'chest' || o.kind === 'sprinkler' || o.kind === 'scarecrow'))
+    if (o && (o.kind === 'machine' || o.kind === 'chest' || o.kind === 'sprinkler' ||
+        o.kind === 'scarecrow' || o.kind === 'fishpond'))
     {
-        give(o.mk || o.kind, 1);
+        if (o.kind === 'fishpond')
+        {
+            if (o.fish)
+            {
+                give(o.fish, 1);
+            }
+            if (o.out && o.out.id)
+            {
+                give(o.out.id, o.out.n || 1);
+            }
+            give('fish_pond', 1);
+        }
+        else
+        {
+            give(o.mk || o.kind, 1);
+        }
         removeObj(MAP, o);
         toast('회수했어요.');
     }
@@ -21965,7 +25119,7 @@ function actPlace(f, id)
         toast('여기엔 놓을 수 없어요.');
         return;
     }
-    if (soilAt(MAP.id, f.x, f.y) && id !== 'sprinkler' && id !== 'sprinkler_q')
+    if (soilAt(MAP.id, f.x, f.y) && id !== 'sprinkler' && id !== 'sprinkler_q' && id !== 'sprinkler_ir')
     {
         toast('밭 위에는 놓을 수 없어요.');
         return;
@@ -21975,7 +25129,7 @@ function actPlace(f, id)
     {
         o = { kind: 'machine', mk: id, x: f.x, y: f.y, busy: false, out: null, readyAt: 0 };
     }
-    else if (id === 'sprinkler' || id === 'sprinkler_q')
+    else if (id === 'sprinkler' || id === 'sprinkler_q' || id === 'sprinkler_ir')
     {
         o = { kind: 'sprinkler', mk: id, x: f.x, y: f.y };
     }
@@ -21987,6 +25141,15 @@ function actPlace(f, id)
     {
         o = { kind: 'scarecrow', x: f.x, y: f.y };
     }
+    else if (id === 'fish_pond')
+    {
+        if (MAP.id !== 'farm' && MAP.id !== 'island_west')
+        {
+            toast('농장(또는 섬 농장)에만 놓을 수 있어요.');
+            return;
+        }
+        o = { kind: 'fishpond', mk: 'fish_pond', x: f.x, y: f.y, fish: null, days: 0, out: null, pop: 0 };
+    }
     else
     {
         o = { kind: 'chest', x: f.x, y: f.y, items: [] };
@@ -21996,16 +25159,64 @@ function actPlace(f, id)
     sfx('plant');
 }
 
-function actBomb(f)
+function actWarpTotem(id)
 {
+    var dest = 'farm';
+    var tx = 24, ty = 20;
+    if (id === 'desert_totem')
+    {
+        if (!S.flags.bus)
+        {
+            toast('버스가 수리되어야 사막에 갈 수 있어요.');
+            return;
+        }
+        dest = 'desert';
+        tx = 12;
+        ty = 16;
+    }
+    else if (id === 'island_warp')
+    {
+        if (!S.flags.boat)
+        {
+            toast('보트를 먼저 수리하세요.');
+            return;
+        }
+        dest = 'island';
+        tx = 18;
+        ty = 14;
+    }
+    else
+    {
+        dest = 'farm';
+        tx = 24;
+        ty = 12;
+    }
+    removeItem(id, 1);
+    sfx('menu');
+    fadeOut(function ()
+    {
+        MAP = loadMap(dest);
+        S.map = dest;
+        S.px = tx * TILE + HALF;
+        S.py = ty * TILE + HALF;
+        toast(MAPS[dest] ? MAPS[dest].name + '으로 이동!' : '순간이동!');
+    });
+}
+
+function actBomb(f, radius)
+{
+    radius = radius || 2;
     consumeSel(1);
     var cx = f.x, cy = f.y;
+    var r2 = radius * radius + 2;
+    var dmg = radius >= 3 ? 120 : 60;
+    var reach = radius >= 3 ? 120 : 88;
     var dx, dy;
-    for (dy = -2; dy <= 2; dy++)
+    for (dy = -radius; dy <= radius; dy++)
     {
-        for (dx = -2; dx <= 2; dx++)
+        for (dx = -radius; dx <= radius; dx++)
         {
-            if (dx * dx + dy * dy > 6)
+            if (dx * dx + dy * dy > r2)
             {
                 continue;
             }
@@ -22030,9 +25241,9 @@ function actBomb(f)
     {
         var mob = MINE.mobs[i];
         var mdx = mob.x - (cx * TILE + HALF), mdy = mob.y - (cy * TILE + HALF);
-        if (mdx * mdx + mdy * mdy < 88 * 88)
+        if (mdx * mdx + mdy * mdy < reach * reach)
         {
-            mob.hp -= 60;
+            mob.hp -= dmg;
             if (mob.hp <= 0)
             {
                 killMob(mob);
@@ -22202,7 +25413,16 @@ function doUseAction()
         }
         if (MAP.interior.guild)
         {
-            openShop('clint');
+            openGuildBoard();
+            return;
+        }
+        if (MAP.interior.spa)
+        {
+            useSpa();
+            return;
+        }
+        if (typeof lateInteriorAction === 'function' && lateInteriorAction())
+        {
             return;
         }
     }
@@ -22282,7 +25502,20 @@ function interactObject(o)
     }
     if (o.kind === 'board')
     {
+        if (MAP.interior && MAP.interior.guild)
+        {
+            openGuildBoard();
+            return true;
+        }
         openRequests();
+        return true;
+    }
+    if (typeof gapInteract === 'function' && gapInteract(o))
+    {
+        return true;
+    }
+    if (typeof lateInteract === 'function' && lateInteract(o))
+    {
         return true;
     }
     if (o.kind === 'pet')
@@ -22503,10 +25736,13 @@ function watchTv()
         '마을 사람에게 선물은 주 2회까지 줄 수 있어요.',
         '스프링클러를 놓으면 아침마다 자동으로 물을 줍니다.',
         '나무를 다 베면 그루터기가 남아요. 도끼로 한 번 더!',
-        '품질이 높은 작물은 더 비싸게 팔립니다.'
+        '품질이 높은 작물은 더 비싸게 팔립니다.',
+        '금·일요일엔 숲에 여행 수레가 옵니다.',
+        '농사 9레벨이면 이리듐 스프링클러를 만들 수 있어요.'
     ];
-    var w = '내일 날씨는 ' + WEATHER_KR[S.tomorrow] + '입니다.';
-    modalMsg('📺 TV', w + '\n\n' + tips[(S.day + S.season * 28) % tips.length]);
+    var head = typeof gapWatchTvExtra === 'function' ? gapWatchTvExtra() :
+        ('내일 날씨는 ' + WEATHER_KR[S.tomorrow] + '입니다.');
+    modalMsg('📺 TV', head + '\n\n' + tips[(S.day + S.season * 28) % tips.length]);
 }
 
 function showCalendar()
@@ -22538,12 +25774,25 @@ function showCalendar()
 
 function openElevator()
 {
+    var deep = S.mineDeep || 0;
+    var mode = 'mine';
+    if (MINE.volcano)
+    {
+        deep = S.volcanoDeep || 0;
+        mode = 'volcano';
+    }
+    else if (MINE.skull)
+    {
+        deep = S.skullDeep || 0;
+        mode = 'skull';
+    }
     var m = modalShell('🛗 엘리베이터');
-    m.body.appendChild(el('div', 'hint', '최고 깊이: ' + S.mineDeep + '층'));
+    m.body.appendChild(el('div', 'hint', '최고 깊이: ' + deep + '층'));
     var grid = el('div');
     grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;';
     var f;
-    for (f = 0; f <= S.mineDeep; f += 5)
+    var maxFl = mode === 'volcano' ? Math.min(deep, 10) : deep;
+    for (f = 0; f <= maxFl; f += 5)
     {
         (function (fl)
         {
@@ -22555,7 +25804,26 @@ function openElevator()
                 {
                     if (fl === 0)
                     {
-                        leaveMine();
+                        if (mode === 'volcano' && typeof leaveVolcano === 'function')
+                        {
+                            leaveVolcano();
+                        }
+                        else if (mode === 'skull')
+                        {
+                            leaveSkull();
+                        }
+                        else
+                        {
+                            leaveMine();
+                        }
+                    }
+                    else if (mode === 'volcano' && typeof enterVolcano === 'function')
+                    {
+                        enterVolcano(fl);
+                    }
+                    else if (mode === 'skull')
+                    {
+                        enterSkull(fl);
                     }
                     else
                     {
@@ -22669,7 +25937,7 @@ function runSprinklers()
             {
                 continue;
             }
-            var r = o.mk === 'sprinkler_q' ? 1 : 0;
+            var r = o.mk === 'sprinkler_ir' ? 2 : (o.mk === 'sprinkler_q' ? 1 : 0);
             var dx, dy;
             for (dy = -1 - r; dy <= 1 + r; dy++)
             {
