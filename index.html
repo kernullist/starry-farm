@@ -1169,7 +1169,7 @@ textarea.fld
     <div id="actZone">
         <button class="actBtn" id="btnTool"><span class="actIco" id="btnToolIco">⛏</span></button>
         <button class="actBtn small" id="btnUse"><span class="actIco">✋</span></button>
-        <button class="actBtn small trade" id="btnTrade" style="display:none;" title="거래">
+        <button class="actBtn small trade" id="btnTrade" style="display:none;" title="서비스">
             <span class="actIco">🛒</span>
         </button>
     </div>
@@ -1213,7 +1213,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2.5';
+var GAME_VER = '4.2.6';
 
 // ---------- core constants ----------
 
@@ -14953,22 +14953,12 @@ function talkTo(actor)
     {
         return;
     }
-    // specialty vendors open their service UI
-    if (actor.id === 'morris' && typeof openJoja === 'function')
-    {
-        openJoja();
-        return;
-    }
-    if (actor.id === 'mrqi' && typeof openCasino === 'function')
-    {
-        openCasino();
-        return;
-    }
+    // Service UIs (shop / Joja / casino / clinic / museum / guild …) are opened
+    // only by the contextual 🛒-style button (openTradeHere), never by talk.
     if (festivalTalk(actor))
     {
         return;
     }
-    // Trading is a separate button (btnTrade), not folded into talk.
     var fline = festivalLine(actor.id);
     if (fline && n.met)
     {
@@ -21495,30 +21485,141 @@ function fadeOut(cb)
 
 // ---------- HUD ----------
 
-// Shop id for the current interior, or null outdoors / non-shop rooms.
-function currentShopId()
+// Contextual service for the current interior (never mixed into talkTo).
+// Returns { kind, icon, title } or null outdoors / plain houses.
+function currentService()
 {
-    if (!MAP || !MAP.interior || !MAP.interior.shop || typeof SHOPS === 'undefined')
+    if (!MAP || !MAP.interior)
     {
         return null;
     }
-    return SHOPS[MAP.interior.shop] ? MAP.interior.shop : null;
+    var inn = MAP.interior;
+    if (inn.shop && typeof SHOPS !== 'undefined' && SHOPS[inn.shop])
+    {
+        return { kind: 'shop', id: inn.shop, icon: '🛒', title: '거래' };
+    }
+    if (inn.joja)
+    {
+        return { kind: 'joja', icon: '🏢', title: '조자마트' };
+    }
+    if (inn.casino)
+    {
+        return { kind: 'casino', icon: '🎰', title: '카지노' };
+    }
+    if (inn.theater)
+    {
+        return { kind: 'theater', icon: '🎬', title: '영화관' };
+    }
+    if (inn.museum)
+    {
+        return { kind: 'museum', icon: '🏺', title: '기증' };
+    }
+    if (inn.heal)
+    {
+        return { kind: 'heal', icon: '💉', title: '치료' };
+    }
+    if (inn.guild)
+    {
+        return { kind: 'guild', icon: '⚔', title: '길드' };
+    }
+    if (inn.bundleRoom)
+    {
+        return { kind: 'bundles', icon: '🎁', title: '번들' };
+    }
+    if (inn.spa)
+    {
+        return { kind: 'spa', icon: '♨️', title: '온천' };
+    }
+    return null;
 }
 
-// Dedicated trade button / T key — never mixed into talkTo.
+// Back-compat for any caller still using the shop-only helper.
+function currentShopId()
+{
+    var svc = currentService();
+    return (svc && svc.kind === 'shop') ? svc.id : null;
+}
+
+function openClinicHeal()
+{
+    modalChoice('해비 병원', '치료를 받을까요? (100G)', [
+        { t: '치료 받기', cb: function ()
+        {
+            if (S.gold < 100)
+            {
+                toast('골드가 부족해요.');
+                return;
+            }
+            S.gold -= 100;
+            S.health = S.maxHealth;
+            S.energy = Math.min(S.maxEnergy, S.energy + 80);
+            closeModal();
+            toast('몸이 가벼워졌어요!');
+            UI.lastHudKey = '';
+        } },
+        { t: '아니요', cls: 'gray', cb: closeModal }
+    ]);
+}
+
+// Dedicated service button / T key — talk stays on btnUse only.
 function openTradeHere()
 {
     if (!S || UI.modal || UI.dialogue || UI.warping)
     {
         return;
     }
-    var sid = currentShopId();
-    if (!sid)
+    var svc = currentService();
+    if (!svc)
     {
-        toast('여기서는 거래할 수 없어요.');
+        toast('여기서는 특별 서비스가 없어요.');
         return;
     }
-    openShop(sid);
+    if (svc.kind === 'shop')
+    {
+        openShop(svc.id);
+        return;
+    }
+    if (svc.kind === 'joja' && typeof openJoja === 'function')
+    {
+        openJoja();
+        return;
+    }
+    if (svc.kind === 'casino' && typeof openCasino === 'function')
+    {
+        openCasino();
+        return;
+    }
+    if (svc.kind === 'theater' && typeof openTheater === 'function')
+    {
+        openTheater();
+        return;
+    }
+    if (svc.kind === 'museum')
+    {
+        openMuseum();
+        return;
+    }
+    if (svc.kind === 'heal')
+    {
+        openClinicHeal();
+        return;
+    }
+    if (svc.kind === 'guild' && typeof openGuildBoard === 'function')
+    {
+        openGuildBoard();
+        return;
+    }
+    if (svc.kind === 'bundles')
+    {
+        openBundles();
+        return;
+    }
+    if (svc.kind === 'spa' && typeof useSpa === 'function')
+    {
+        useSpa();
+        return;
+    }
+    toast('서비스를 열 수 없어요.');
 }
 
 function updateHud()
@@ -21527,10 +21628,11 @@ function updateHud()
     {
         return;
     }
-    var shopKey = currentShopId() || '';
+    var svc = currentService();
+    var svcKey = svc ? (svc.kind + ':' + (svc.id || '')) : '';
     var key = S.gold + '|' + S.time + '|' + S.day + '|' + S.season + '|' + Math.round(S.energy) +
         '|' + S.sel + '|' + S.health + '|' + S.weather + '|' + S.goalIdx + '|' + invSig() +
-        '|' + (MAP ? MAP.id : '') + '|' + shopKey;
+        '|' + (MAP ? MAP.id : '') + '|' + svcKey;
     if (key === UI.lastHudKey)
     {
         return;
@@ -21559,11 +21661,25 @@ function updateHud()
         hw.style.display = 'none';
     }
 
-    // 🛒 trade button only inside shop interiors (talk stays on ✋)
+    // Contextual service button (shop / heal / museum / guild / joja / …)
+    // Talk always stays on the blue ✋ button.
     var btr = $('btnTrade');
     if (btr)
     {
-        btr.style.display = shopKey ? 'flex' : 'none';
+        if (svc)
+        {
+            btr.style.display = 'flex';
+            btr.title = svc.title || '서비스';
+            var ico = btr.querySelector('.actIco');
+            if (ico)
+            {
+                ico.textContent = svc.icon || '🛒';
+            }
+        }
+        else
+        {
+            btr.style.display = 'none';
+        }
     }
 
     drawClockDial();
@@ -25870,7 +25986,8 @@ function doUseAction()
         return;
     }
 
-    // interior specials
+    // Interior fixtures still open services when no NPC is in range
+    // (service button is the primary path when a villager is nearby).
     if (!MAP.outdoor && MAP.interior)
     {
         if (MAP.interior.shop && nearFurniture('counter', f))
@@ -25890,23 +26007,7 @@ function doUseAction()
         }
         if (MAP.interior.heal)
         {
-            modalChoice('해비 병원', '치료를 받을까요? (100G)', [
-                { t: '치료 받기', cb: function ()
-                {
-                    if (S.gold < 100)
-                    {
-                        toast('골드가 부족해요.');
-                        return;
-                    }
-                    S.gold -= 100;
-                    S.health = S.maxHealth;
-                    S.energy = Math.min(S.maxEnergy, S.energy + 80);
-                    closeModal();
-                    toast('몸이 가벼워졌어요!');
-                    UI.lastHudKey = '';
-                } },
-                { t: '아니요', cls: 'gray', cb: closeModal }
-            ]);
+            openClinicHeal();
             return;
         }
         if (MAP.interior.guild)
