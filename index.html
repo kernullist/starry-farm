@@ -23653,16 +23653,17 @@ function assertLoaded()
             })()],
         // A villager hat with a typo'd style silently falls back to straw, so
         // every style the town actually wears has to resolve to a spec.
+        // Count is >= 11 (original cast); late.js adds morris/mrqi hats.
         ['NPC hats', (function ()
         {
-            if (typeof NPCS === 'undefined' || !NPCS)
+            if (typeof NPCS === 'undefined' || !NPCS || typeof HAT_SPEC === 'undefined')
             {
                 return false;
             }
             var i, worn = 0;
             for (i = 0; i < NPCS.length; i++)
             {
-                var h = NPCS[i].look.hat;
+                var h = NPCS[i].look && NPCS[i].look.hat;
                 if (!h)
                 {
                     continue;
@@ -23673,7 +23674,7 @@ function assertLoaded()
                 }
                 worn++;
             }
-            return worn === 11;
+            return worn >= 11;
         })()],
         // o.eye was read by the sprite code but set by nobody, so all 29 shared
         // one eye colour. Assert variety, not the field.
