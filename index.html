@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2';
+var GAME_VER = '4.2.1';
 
 // ---------- core constants ----------
 
@@ -3255,7 +3255,32 @@ function drawSkirt(g, y0, y1, wTop, wBot, sway, col)
     pr(g, x, y0 + rows, w, 1, tone(col, -1.9));
 }
 
-function drawPerson(g, o, dir, frame)
+// Grip point for a held tool (sprite-local, origin top-left of the 32x54 body).
+// frame is walk 0-3; swing poses do not use this.
+// behind: true means the tool should be drawn under the body (facing away).
+function holdToolGrip(dir, frame, opt)
+{
+    opt = opt || {};
+    var tall = Math.max(-2, Math.min(2, opt.tall || 0));
+    var step = (frame === 1) ? 1 : ((frame === 3) ? -1 : 0);
+    var bob = (frame === 1 || frame === 3) ? -1 : 0;
+    var swing = step * 2;
+    var ty = 21 - tall + bob;
+    if (dir === 2)
+    {
+        // side profile: tool in the leading hand, tip angled down a little
+        return { gx: 26, gy: ty + 11 + Math.round(swing * .25), ang: .55, behind: false };
+    }
+    if (dir === 1)
+    {
+        // from behind: tool sits on the right hip, partly under the body
+        return { gx: 24, gy: ty + 10 + Math.round(swing * .2), ang: -.35, behind: true };
+    }
+    // front: right hand holds the tool at the side
+    return { gx: 23, gy: ty + 12 + Math.round(swing * .3), ang: .65, behind: false };
+}
+
+function drawPerson(g, o, dir, frame, hold)
 {
     var skin = o.skin || '#f0c8a0';
     var hair = o.hair || '#5a3a1a';
@@ -3265,7 +3290,9 @@ function drawPerson(g, o, dir, frame)
     var eye = o.eye || '#33241a';
 
     // frames 0-3 are the walk cycle; 4-6 are tool poses (wind up / strike / recover)
+    // hold only applies to walk frames (one-handed idle/carry)
     var act = frame >= 4 ? (frame - 4) : -1;
+    hold = !!(hold && act < 0);
     // 29 villagers sharing one body read as recolours of the same person.
     // tall shifts the head/torso up while the feet stay anchored; wide thickens
     // the torso. Small ranges on purpose - variety, not deformity.
@@ -3434,6 +3461,45 @@ function drawPerson(g, o, dir, frame)
         pr(g, gx + 1, gy - 1, 4, 2, tone(shirt, -1.8));
         drawHand(g, gx - 4, gy, skin, -1);
         drawHand(g, gx, gy, skin, 1);
+    }
+    else if (hold)
+    {
+        // One-handed carry: free arm keeps a light walk swing, grip arm
+        // tracks holdToolGrip so the overlaid icon lands on the hand.
+        var hg = holdToolGrip(dir, frame, o);
+        var hgx = hg.gx, hgy = hg.gy;
+        var hshy = ty + 4;
+        var hshl = (fem ? 13 : 12) - wide, hshr = (fem ? 19 : 20) + wide;
+        if (dir === 2)
+        {
+            // profile: single visible arm reaches to the grip
+            var hAp = fem ? 13 : 12;
+            var hElx = (hAp + 2 + hgx) / 2;
+            var hEly = (hshy + hgy) / 2 + 1;
+            drawLimb(g, hAp + 2, hshy, hElx, hEly, 5, 4, shirt);
+            drawLimb(g, hElx, hEly, hgx, hgy, 4, 3, shirt);
+            pr(g, hgx - 2, hgy - 1, 4, 2, tone(shirt, -1.8));
+            drawHand(g, hgx - 1, hgy, skin, 1);
+        }
+        else
+        {
+            // front/back: free (left) arm walks, right arm holds the tool
+            var hAlx = (fem ? 5 : 4) - wide;
+            var hAin = fem ? 1 : 0;
+            pr(g, hAlx, ty + 3 - swing, 5, 5, shirt);
+            pr(g, hAlx + hAin, ty + 8 - swing, 5, 4, shirt);
+            pr(g, hAlx, ty + 3 - swing, 1, 5, tone(shirt, 1));
+            pr(g, hAlx + hAin, ty + 8 - swing, 1, 4, tone(shirt, 1));
+            pr(g, hAlx + hAin, ty + 11 - swing, 5, 2, tone(shirt, -1.8));
+            drawHand(g, hAlx + hAin + 1, ty + 13 - swing, skin, 1);
+            // grip arm (right)
+            var hErx = (hshr + hgx) / 2 + 1;
+            var hEry = (hshy + hgy) / 2 + 1;
+            drawLimb(g, hshr, hshy, hErx, hEry, 5, 4, shirt);
+            drawLimb(g, hErx, hEry, hgx, hgy, 4, 3, shirt);
+            pr(g, hgx - 2, hgy - 1, 4, 2, tone(shirt, -1.8));
+            drawHand(g, hgx - 1, hgy, skin, -1);
+        }
     }
     else if (dir === 2)
     {
@@ -3694,16 +3760,17 @@ function drawHair(g, style, hair, dir, hy, skin, capped, fem)
     }
 }
 
-function personSprite(key, opt, dir, frame)
+function personSprite(key, opt, dir, frame, hold)
 {
+    hold = !!hold;
     return bake('p:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' +
         (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' +
         (opt.face || 'round') + ':' + (opt.eyes || 'round') + ':' + (opt.mouth || 'smile') + ':' +
         (opt.eye || '') + ':' + (opt.freckles ? 1 : 0) + ':' +
         (opt.hat ? opt.hat.style + opt.hat.col : '-') + ':' + (opt.glasses ? 'g' : '') +
-        ':' + dir + ':' + frame, PW, PH, function (g)
+        ':' + dir + ':' + frame + (hold ? ':h' : ''), PW, PH, function (g)
     {
-        drawPerson(g, opt, dir, frame);
+        drawPerson(g, opt, dir, frame, hold);
     }, { outline: true });
 }
 
@@ -10427,6 +10494,41 @@ function invFull()
         }
     }
     return true;
+}
+
+// true if at least `n` of `id` (quality q) would fit without spawning ground drops
+function canFitItem(id, n, q)
+{
+    n = n || 1;
+    q = q || 0;
+    if (!ITEMS[id] || !S)
+    {
+        return false;
+    }
+    var left = n, i;
+    if (!isTool(id))
+    {
+        for (i = 0; i < S.inv.length; i++)
+        {
+            var sl = S.inv[i];
+            if (sl && sl.id === id && (sl.q || 0) === q && sl.n < stackMax(id))
+            {
+                left -= Math.min(left, stackMax(id) - sl.n);
+                if (left <= 0)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    for (i = 0; i < S.invSize && left > 0; i++)
+    {
+        if (!S.inv[i])
+        {
+            left -= Math.min(left, stackMax(id));
+        }
+    }
+    return left <= 0;
 }
 
 // give an item to the player; drops on the ground when the bag is full
@@ -24518,6 +24620,12 @@ function movePlayer(dt)
         PLAYER.frame = 0;
     }
 
+    // walk over ground loot: stone chips, fiber, forage, branches
+    if (!UI.modal && !UI.dialogue && !UI.warping && !(FISHING && FISHING.on))
+    {
+        pickupNear(true);
+    }
+
     checkWarp();
 }
 
@@ -25450,8 +25558,8 @@ function doUseAction()
     var f = facingTile();
     var here = { x: Math.floor(S.px / TILE), y: Math.floor(S.py / TILE) };
 
-    // pick up drops / forage under and around the player
-    if (pickupNear())
+    // pick up drops / forage under and around the player (manual use button)
+    if (pickupNear(false))
     {
         return;
     }
@@ -25564,13 +25672,22 @@ function nearFurniture(kind, f)
     return false;
 }
 
-function pickupNear()
+// Pick up ground drops / forage / branches under and around the player.
+// When auto is true (walk-over), skip items that will not fit so the pile
+// stays put and the "bag full" toast is not spammed every frame.
+// Returns how many objects were taken.
+function pickupNear(auto)
 {
+    if (!S || !MAP)
+    {
+        return 0;
+    }
     var here = { x: Math.floor(S.px / TILE), y: Math.floor(S.py / TILE) };
     var f = facingTile();
     var spots = [here, f,
         { x: here.x + 1, y: here.y }, { x: here.x - 1, y: here.y },
         { x: here.x, y: here.y + 1 }, { x: here.x, y: here.y - 1 }];
+    var taken = 0;
     var i;
     for (i = 0; i < spots.length; i++)
     {
@@ -25581,35 +25698,74 @@ function pickupNear()
         }
         if (o.kind === 'drop')
         {
+            if (auto && !canFitItem(o.item, 1, o.q || 0))
+            {
+                continue;
+            }
             give(o.item, 1, o.q);
             removeObj(MAP, o);
             sfx('pickup');
-            UI.lastHudKey = '';
-            return true;
+            taken++;
+            // one-shot button pick; walk-over keeps sweeping nearby tiles
+            if (!auto)
+            {
+                UI.lastHudKey = '';
+                return 1;
+            }
+            continue;
         }
         if (o.kind === 'forage')
         {
             var q = hasProf('botanist') ? 3 : (Math.random() < skillLvl('foraging') * .05 ? 1 : 0);
             var n = hasProf('gatherer') && Math.random() < .2 ? 2 : 1;
+            if (auto)
+            {
+                if (!canFitItem(o.item, 1, q))
+                {
+                    continue;
+                }
+                // do not overflow onto the ground during walk-over
+                if (n > 1 && !canFitItem(o.item, n, q))
+                {
+                    n = 1;
+                }
+            }
             give(o.item, n, q);
             addXp('foraging', 7);
             S.stats.foraged += n;
             checkGoal();
             removeObj(MAP, o);
             sfx('pickup');
-            UI.lastHudKey = '';
-            return true;
+            taken++;
+            if (!auto)
+            {
+                UI.lastHudKey = '';
+                return 1;
+            }
+            continue;
         }
         if (o.kind === 'branch')
         {
+            if (auto && !canFitItem('wood', 2, 0))
+            {
+                continue;
+            }
             give('wood', 2);
             removeObj(MAP, o);
             sfx('pickup');
-            UI.lastHudKey = '';
-            return true;
+            taken++;
+            if (!auto)
+            {
+                UI.lastHudKey = '';
+                return 1;
+            }
         }
     }
-    return false;
+    if (taken > 0)
+    {
+        UI.lastHudKey = '';
+    }
+    return taken;
 }
 
 function interactObject(o)
@@ -26390,6 +26546,29 @@ function drawSoil(g, season)
 var PLAYER_DX = -PW / 2;
 var PLAYER_DY = -50;
 
+// Draw a tool icon at a sprite-local grip, honouring the same flip as the body.
+function drawToolAtGrip(g, x, y, flip, grip, toolId, size)
+{
+    size = size || 20;
+    var ico = itemIcon(toolId, size);
+    var half = size / 2;
+    g.save();
+    if (flip)
+    {
+        g.translate(x + PW, y);
+        g.scale(-1, 1);
+        g.translate(grip.gx, grip.gy);
+        g.rotate(grip.ang);
+    }
+    else
+    {
+        g.translate(x + grip.gx, y + grip.gy);
+        g.rotate(grip.ang);
+    }
+    g.drawImage(ico, -half, -half);
+    g.restore();
+}
+
 function drawPlayer(g)
 {
     var x = Math.round(S.px + PLAYER_DX - CAM.x);
@@ -26397,11 +26576,23 @@ function drawPlayer(g)
     var dir = S.dir === 0 ? 0 : (S.dir === 1 ? 1 : 2);
     var flip = S.dir === 3;
     var frame = PLAYER.moving ? PLAYER.frame : 0;
-    if (PLAYER.act > 0)
+    var swinging = PLAYER.act > 0;
+    if (swinging)
     {
         // 4 = wind up, 5 = strike, 6 = recover
         frame = PLAYER.act > 12 ? 4 : (PLAYER.act > 6 ? 5 : 6);
     }
+    // idle/walk hold: hotbar tool selected, not mid-swing, not mid-cast
+    var holdId = null;
+    if (!swinging && !(FISHING && FISHING.on))
+    {
+        var holdSl = selSlot();
+        if (holdSl && isTool(holdSl.id))
+        {
+            holdId = holdSl.id;
+        }
+    }
+    var holding = !!holdId;
     if (MINE.hurtCd > 40 && MINE.hurtCd % 6 < 3)
     {
         g.globalAlpha = .5;
@@ -26423,7 +26614,13 @@ function drawPlayer(g)
         }
         me.hat = hl;
     }
-    var spr = personSprite('me', me, dir, frame);
+    var grip = holding ? holdToolGrip(dir, frame, me) : null;
+    // tools behind the body (facing away) paint first so the torso covers them
+    if (grip && grip.behind)
+    {
+        drawToolAtGrip(g, x, y, flip, grip, holdId, 20);
+    }
+    var spr = personSprite('me', me, dir, frame, holding);
     if (flip)
     {
         g.save();
@@ -26436,10 +26633,14 @@ function drawPlayer(g)
     {
         g.drawImage(spr, x, y);
     }
+    if (grip && !grip.behind)
+    {
+        drawToolAtGrip(g, x, y, flip, grip, holdId, 20);
+    }
     g.globalAlpha = 1;
 
-    // the held tool follows the same arc as the pose
-    if (PLAYER.act > 0)
+    // the swung tool follows the same arc as the strike pose
+    if (swinging)
     {
         PLAYER.act--;
         var p = 1 - PLAYER.act / 18;
