@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '3.7';
+var GAME_VER = '3.8';
 
 // ---------- core constants ----------
 
@@ -2007,6 +2007,13 @@ I('hat_wreath', '꽃 화관', 'hat', 0, 'hat', ['#f06a90', '#4a8a3a', '#fff8d0']
 I('hat_pumpkin', '호박 모자', 'hat', 0, 'hat', ['#e08830', '#a05010', '#f8b060'], { hatStyle: 'pumpkin', hatCol: '#e08830', desc: '유령의 밤 미로를 끝까지 걸은 사람만 쓴다.' });
 I('hat_santa', '산타 모자', 'hat', 0, 'hat', ['#c83a3a', '#8a1818', '#f4f4f8'], { hatStyle: 'santa', hatCol: '#c83a3a', desc: '겨울 별 축제의 선물. 방울이 달려 있다.' });
 I('hat_helmet', '광부 헬멧', 'hat', 0, 'hat', ['#d8b020', '#a07800', '#fff0a0'], { hatStyle: 'helmet', hatCol: '#d8b020', desc: '깊은 곳까지 내려간 사람에게 주어진다.' });
+// The five the villagers wear, now for sale too - a hat you can see but never
+// get is a tease. Each is sold by the person whose job it belongs to.
+I('hat_chef', '요리사 모자', 'hat', 1800, 'hat', ['#f4f4f8', '#c8c8d0', '#ffffff'], { hatStyle: 'chef', hatCol: '#f4f4f8', desc: '거스의 주방에서 쓰던 것과 같은 모자.' });
+I('hat_bucket', '어부 모자', 'hat', 900, 'hat', ['#3a5a70', '#243a4a', '#6a8a9a'], { hatStyle: 'bucket', hatCol: '#3a5a70', desc: '챙이 부드럽게 처져 비를 잘 막아준다.' });
+I('hat_bandana', '두건', 'hat', 700, 'hat', ['#c04838', '#8a2418', '#e07a68'], { hatStyle: 'bandana', hatCol: '#c04838', desc: '땀이 눈에 들어가지 않게 이마에 두른다.' });
+I('hat_fedora', '중절모', 'hat', 3000, 'hat', ['#4a3a30', '#2a1e18', '#7a6458'], { hatStyle: 'fedora', hatCol: '#4a3a30', desc: '어른스러운 모자. 챙이 좁고 띠가 굵다.' });
+I('hat_wizard', '마법사 모자', 'hat', 5000, 'hat', ['#4a3a7a', '#2a1e4a', '#7a68b0'], { hatStyle: 'wizard', hatCol: '#4a3a7a', desc: '별이 달린 뾰족 모자. 쓴다고 마법을 쓰지는 못한다.' });
 
 var SHOPS = {
     pierre: {
@@ -2052,6 +2059,7 @@ var SHOPS = {
             { id: 'hat_beanie' },
             { id: 'hat_cap' },
             { id: 'hat_cowboy', year: 2 },
+            { id: 'hat_fedora', year: 3 },
             { id: 'fert_basic', price: 100 },
             { id: 'fert_quality', price: 150 },
             { id: 'speed_gro', price: 100 },
@@ -2066,6 +2074,7 @@ var SHOPS = {
     clint: {
         name: '클린트 대장간', npc: 'clint',
         stock: [
+            { id: 'hat_bandana' },
             { id: 'copper_ore', price: 75 },
             { id: 'iron_ore', price: 150 },
             { id: 'coal', price: 150 },
@@ -2095,6 +2104,7 @@ var SHOPS = {
     willy: {
         name: '윌리 낚시가게', npc: 'willy',
         stock: [
+            { id: 'hat_bucket' },
             { id: 'bait', price: 5 },
             { id: 'rod', price: 1800, hide: true }
         ],
@@ -2103,6 +2113,7 @@ var SHOPS = {
     saloon: {
         name: '스타드롭 살롱', npc: 'gus',
         stock: [
+            { id: 'hat_chef' },
             { id: 'beer', price: 400 },
             { id: 'salad', price: 220 },
             { id: 'bread', price: 120 },
@@ -2989,11 +3000,45 @@ var HAT_SPEC = {
     // player can obtain; these five exist so a blacksmith does not look like a
     // shopkeeper. Promote one to an item if it turns out to be wanted.
     chef: { crownH: 8, crownW: 12, brim: 0, puff: 1 },
-    wizard: { crownH: 10, crownW: 12, brim: 3, cone: 1, star: 1 },
+    wizard: { crownH: 10, crownW: 12, brim: 3, cone: 1, star: 1, bend: 1 },
     bandana: { crownH: 2, crownW: 18, brim: 0, knot: 1 },
     fedora: { crownH: 4, crownW: 14, brim: 4, dent: 1, band: '#3a2a1a' },
     bucket: { crownH: 4, crownW: 16, brim: 4, floppy: 1 }
 };
+
+// Glasses are not a hat: they sit on the face, so they are unaffected by the
+// hair flattening a hat causes. The lens is left open - filling it would erase
+// the eye and take the expression with it.
+function drawGlasses(g, dir, hy, fo, skin)
+{
+    var fr = '#4a4a52', gl = 'rgba(200,232,248,.30)';
+    if (dir === 0)
+    {
+        pr(g, 9 + fo, hy + 6, 6, 1, fr);
+        pr(g, 17 - fo, hy + 6, 6, 1, fr);
+        pr(g, 9 + fo, hy + 6, 1, 5, fr);
+        pr(g, 14 + fo, hy + 6, 1, 5, fr);
+        pr(g, 17 - fo, hy + 6, 1, 5, fr);
+        pr(g, 22 - fo, hy + 6, 1, 5, fr);
+        pr(g, 9 + fo, hy + 10, 6, 1, fr);
+        pr(g, 17 - fo, hy + 10, 6, 1, fr);
+        pr(g, 15 + fo, hy + 7, 2 - fo, 1, fr);          // bridge
+        pr(g, 10 + fo, hy + 7, 4, 3, gl);
+        pr(g, 18 - fo, hy + 7, 4, 3, gl);
+        pr(g, 10 + fo, hy + 7, 2, 1, 'rgba(255,255,255,.55)');
+        return;
+    }
+    if (dir === 2)
+    {
+        pr(g, 16 - fo, hy + 6, 7, 1, fr);
+        pr(g, 16 - fo, hy + 6, 1, 5, fr);
+        pr(g, 22 - fo, hy + 6, 1, 5, fr);
+        pr(g, 16 - fo, hy + 10, 7, 1, fr);
+        pr(g, 17 - fo, hy + 7, 5, 3, gl);
+        pr(g, 17 - fo, hy + 7, 2, 1, 'rgba(255,255,255,.55)');
+        pr(g, 12 - fo, hy + 7, 4, 1, fr);               // temple arm
+    }
+}
 
 function drawHat(g, style, col, dir, hy)
 {
@@ -3061,6 +3106,17 @@ function drawHat(g, style, col, dir, hy)
         pr(g, cx + 5, top + 1, 1, 2, d1);
         pr(g, cx + 9, top + 1, 1, 2, d1);
         pr(g, cx - 1, top + 3, cw + 2, 1, d1);
+    }
+    if (sp.bend)
+    {
+        // The cone can only be five rows tall - hy bottoms out at 3 and anything
+        // above y=0 is cropped. Raising the sprite would shift every character
+        // for one hat, so the tip leans sideways instead of climbing.
+        var bx2 = (dir === 2) ? 10 : 19, bs = (dir === 2) ? -1 : 1;
+        pr(g, bx2, top, 4, 2, col);
+        pr(g, bx2 + bs * 3, top - (top > 0 ? 1 : 0), 3, 2, col);
+        pr(g, bx2 + bs * 3, top - (top > 0 ? 1 : 0), 3, 1, l1);
+        pr(g, bx2 + bs * 5, top, 2, 2, d1);
     }
     if (sp.star)
     {
@@ -3434,8 +3490,12 @@ function drawPerson(g, o, dir, frame)
     pr(g, 11, hy + 14, 10, 1, tone(skin, -1.4));
 
     drawFace(g, o, dir, hy, fo, fem, skin, hair, eye);
+    if (o.glasses)
+    {
+        drawGlasses(g, dir, hy, fo, skin);
+    }
 
-    drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin, !!o.hat);
+    drawHair(g, o.hairStyle || 'bowl', hair, dir, hy, skin, !!o.hat, fem);
 
     if (o.hat)
     {
@@ -3465,13 +3525,16 @@ var HAIR_SPEC = {
     long: { rise: 4, wide: 0, fringe: [4, 3, 5, 3, 4, 3, 5, 3, 4, 3], ear: 10, nape: 8 }
 };
 
-function drawHair(g, style, hair, dir, hy, skin, capped)
+function drawHair(g, style, hair, dir, hy, skin, capped, fem)
 {
     var d1 = tone(hair, -1.2), d2 = tone(hair, -2.2);
     var l1 = tone(hair, 1.1), l2 = tone(hair, 2);
     var sp = HAIR_SPEC[style] || HAIR_SPEC.bowl;
     var rise = sp.rise, wide = sp.wide;
-    var w0 = 12 + wide * 2, w1 = 16 + wide * 2, w2 = 18 + wide * 2;
+    // The female head is two pixels narrower (v3.0) but the hair kept the male
+    // skull width, so it sat proud of the face on every one of the 12 women.
+    var narrow = fem ? 1 : 0;
+    var w0 = 12 + wide * 2 - narrow * 2, w1 = 16 + wide * 2 - narrow * 2, w2 = 18 + wide * 2 - narrow * 2;
     var lx = 16 - w2 / 2, rx = 16 + w2 / 2;
     // hy runs from 3 (tall villager, mid-stride) to 9. Anything drawn above
     // y = 0 is silently cropped by bake, which is how a tall character's bun
@@ -3636,7 +3699,8 @@ function personSprite(key, opt, dir, frame)
         (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' +
         (opt.face || 'round') + ':' + (opt.eyes || 'round') + ':' + (opt.mouth || 'smile') + ':' +
         (opt.eye || '') + ':' + (opt.freckles ? 1 : 0) + ':' +
-        (opt.hat ? opt.hat.style + opt.hat.col : '-') + ':' + dir + ':' + frame, PW, PH, function (g)
+        (opt.hat ? opt.hat.style + opt.hat.col : '-') + ':' + (opt.glasses ? 'g' : '') +
+        ':' + dir + ':' + frame, PW, PH, function (g)
     {
         drawPerson(g, opt, dir, frame);
     }, { outline: true });
@@ -7883,7 +7947,8 @@ var INTERIORS = {
             { k: 'kitchen', x: 2, y: 6 }, { k: 'chest', x: 12, y: 8 }, { k: 'calendar', x: 6, y: 1 },
             { k: 'plant', x: 16, y: 8 }, { k: 'painting', x: 10, y: 1 }, { k: 'lamp', x: 13, y: 6 },
             { k: 'stool', x: 7, y: 8 }, { k: 'books', x: 2, y: 9 },
-            { k: 'window', x: 3, y: 1 }, { k: 'window', x: 11, y: 1 }, { k: 'fireplace', x: 8, y: 1 }, { k: 'clock', x: 16, y: 1 }],
+            { k: 'window', x: 3, y: 1 }, { k: 'window', x: 11, y: 1 }, { k: 'fireplace', x: 8, y: 1 }, { k: 'clock', x: 16, y: 1 },
+            { k: 'mirror', x: 5, y: 1 }],
         exit: { x: 8, y: 11, to: 'farm', tx: 21, ty: 10 } },
     greenhouse: { name: '온실', w: 20, h: 14, floor: T_STONE, floorCol: '#c8d4c4', floorStyle: 'checker', wall: '#a8c8b8', paper: 'tile',
         f: [{ k: 'plant', x: 2, y: 2 }, { k: 'plant', x: 17, y: 2 }, { k: 'crate', x: 2, y: 11 },
@@ -9727,6 +9792,19 @@ function drawFurniture(g, kind, x, y)
         leafClump(g, x + 22, y + 16, 8, '#3f7a32');
         leafClump(g, x + 16, y + 8, 9, '#57a03f');
         leafClump(g, x + 8, y + 8, 6, '#4a8a3a');
+    }
+    else if (kind === 'mirror')
+    {
+        var mf = '#a88a58';
+        pr(g, x, y, 40, 46, mf);
+        pr(g, x, y, 40, 3, tone(mf, 1.3));
+        pr(g, x, y + 43, 40, 3, tone(mf, -2));
+        pe(g, x + 20, y + 23, 15, 19, '#9fc8d8');
+        pe(g, x + 20, y + 23, 13, 17, '#c8e4f0');
+        // a slash of reflected light so it reads as glass and not a hole
+        pr(g, x + 10, y + 10, 3, 16, '#eaf6fc');
+        pr(g, x + 15, y + 8, 2, 10, '#ffffff');
+        pe(g, x + 20, y + 34, 9, 4, '#b6d8e8');
     }
     else if (kind === 'painting')
     {
@@ -13786,7 +13864,7 @@ var NPCS = [
     },
     {
         id: 'harvey', name: '하비', gender: 'm', wed: true, bd: { s: 'winter', d: 14 },
-        look: { skin: '#e8c098', hair: '#4a3a2a', hairStyle: 'short', shirt: '#f0f0f4', pants: '#4a4a58' },
+        look: { skin: '#e8c098', hair: '#4a3a2a', hairStyle: 'short', shirt: '#f0f0f4', pants: '#4a4a58', glasses: true },
         loves: ['coffee', 'pickles', 'farmers_lunch', 'wine', 'truffle_oil'],
         likes: ['bread', 'salad', 'omelet', 'cheese'],
         sch: [[6, 'clinic', 8, 5], [12, 'town', 24, 22], [16, 'clinic', 8, 5], [21, 'clinic', 12, 4]],
@@ -15051,6 +15129,7 @@ INTERIORS.oasis = {
 SHOPS.oasis = {
     name: '오아시스', npc: 'sandy',
     stock: [
+        { id: 'hat_wizard' },
         { id: 'cactus_seeds', price: 150 },
         { id: 'rhubarb_seeds', price: 100 },
         { id: 'starfruit_seeds', price: 400 },
@@ -20437,6 +20516,7 @@ function assertLoaded()
             NPC_BY_ID.abigail && NPC_BY_ID.abigail.look.form === 'b' &&
             NPC_BY_ID.alex && NPC_BY_ID.alex.look.form === 'a'],
         ['OUTFITS', typeof OUTFITS !== 'undefined' && OUTFITS && OUTFITS.length === 3],
+        ['mirror', typeof buildLookEditor === 'function' && typeof openMirror === 'function'],
         // eight hats, each with a spec to draw it and an item to obtain it
         ['hats', typeof HAT_STYLES !== 'undefined' && HAT_STYLES && HAT_STYLES.length === 8 &&
             (function ()
@@ -20601,31 +20681,15 @@ function boot()
     requestAnimationFrame(loop);
 }
 
-function askName()
+// The new-game screen and the mirror show the same thirteen rows. Kept as one
+// function on purpose: split in two, the next option added would land in only
+// one of them.
+function buildLookEditor(host, look, pk)
 {
-    var m = modalShell('새 농장', false);
-    m.body.appendChild(el('div', 'hint', '이름과 농장 이름을 정해주세요.'));
-    var n1 = el('input', 'fld');
-    n1.placeholder = '내 이름';
-    n1.maxLength = 8;
-    n1.style.marginBottom = '8px';
-    var n2 = el('input', 'fld');
-    n2.placeholder = '농장 이름';
-    n2.maxLength = 8;
-    m.body.appendChild(n1);
-    m.body.appendChild(n2);
-
-    m.body.appendChild(el('div', 'sectionTitle', '모습'));
-    var look = {
-        skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
-        shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
-        form: 'a', outfit: 'pants',
-        face: 'round', eyes: 'round', mouth: 'smile', eye: EYE_COLORS[0], freckles: false
-    };
     var marks = [];
     var prev = makeCv(48, 81);
     prev.style.cssText = 'width:48px;height:81px;image-rendering:pixelated;display:block;margin:0 auto 8px;';
-    m.body.appendChild(prev);
+    host.appendChild(prev);
 
     function redraw()
     {
@@ -20639,12 +20703,12 @@ function askName()
         var k;
         for (k in SPR_CACHE)
         {
-            if (SPR_CACHE.hasOwnProperty(k) && k.indexOf('p:newlook:') === 0)
+            if (SPR_CACHE.hasOwnProperty(k) && k.indexOf('p:' + pk + ':') === 0)
             {
                 delete SPR_CACHE[k];
             }
         }
-        g.drawImage(personSprite('newlook', look, 0, 0), 0, 0, PW, PH, 0, 0, 48, 81);
+        g.drawImage(personSprite(pk, look, 0, 0), 0, 0, PW, PH, 0, 0, 48, 81);
     }
     redraw();
 
@@ -20696,7 +20760,7 @@ function askName()
         }
         mark();
         marks.push({ key: key, vals: vals, mark: mark, row: row, cap: cap0 });
-        m.body.appendChild(row);
+        host.appendChild(row);
     }
 
     // The bottom colour paints trousers or a skirt, but a dress is drawn in the
@@ -20739,7 +20803,7 @@ function askName()
         syncBottom();
         redraw();
     };
-    m.body.appendChild(dice);
+    host.appendChild(dice);
 
     picker('성별', 'form', [['a', '남자'], ['b', '여자']]);
     picker('피부', 'skin', ['#f6dcc0', '#f0c8a0', '#d8a878', '#a87850', '#7a4a2a']);
@@ -20747,14 +20811,14 @@ function askName()
     picker('머리모양', 'hairStyle', [['bowl', '단발'], ['short', '짧게'], ['spiky', '삐죽'],
         ['bun', '올림'], ['curly', '곱슬'], ['pony', '포니'], ['wave', '웨이브'], ['long', '긴머리']]);
 
-    m.body.appendChild(el('div', 'sectionTitle', '얼굴'));
+    host.appendChild(el('div', 'sectionTitle', '얼굴'));
     picker('얼굴형', 'face', [['round', '동글'], ['oval', '갸름'], ['soft', '통통']]);
     picker('눈 모양', 'eyes', [['round', '큰눈'], ['narrow', '실눈'], ['wide', '왕눈']]);
     picker('눈동자', 'eye', EYE_COLORS);
     picker('입', 'mouth', [['smile', '보통'], ['grin', '활짝'], ['small', '작게']]);
     picker('주근깨', 'freckles', [[false, '없음'], [true, '있음']]);
 
-    m.body.appendChild(el('div', 'sectionTitle', '옷'));
+    host.appendChild(el('div', 'sectionTitle', '옷'));
     picker('옷차림', 'outfit', [['pants', '바지'], ['skirt', '치마'], ['dress', '원피스']]);
     picker('윗옷 색', 'shirt', ['#4a7ac8', '#c85a48', '#5a9a4a', '#d8a838', '#a858c8', '#e0e0e8', '#3a3a4a']);
     picker('바지 색', 'pants', ['#3a4a6a', '#5a3a24', '#3a3a42', '#3a6a4a', '#c85a8a', '#6a4a8a', '#c8b090']);
@@ -20762,6 +20826,31 @@ function askName()
     // end in them - so this row never needs the dimming the bottom row does.
     picker('신발 색', 'shoe', ['#4a2a12', '#2a2a30', '#8a6a3a', '#a03a3a', '#e0e0e8', '#3a5a80']);
     syncBottom();
+    return redraw;
+}
+
+function askName()
+{
+    var m = modalShell('새 농장', false);
+    m.body.appendChild(el('div', 'hint', '이름과 농장 이름을 정해주세요.'));
+    var n1 = el('input', 'fld');
+    n1.placeholder = '내 이름';
+    n1.maxLength = 8;
+    n1.style.marginBottom = '8px';
+    var n2 = el('input', 'fld');
+    n2.placeholder = '농장 이름';
+    n2.maxLength = 8;
+    m.body.appendChild(n1);
+    m.body.appendChild(n2);
+
+    m.body.appendChild(el('div', 'sectionTitle', '모습'));
+    var look = {
+        skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+        shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
+        form: 'a', outfit: 'pants',
+        face: 'round', eyes: 'round', mouth: 'smile', eye: EYE_COLORS[0], freckles: false
+    };
+    buildLookEditor(m.body, look, 'newlook');
 
     m.body.appendChild(el('div', 'sectionTitle', '반려동물'));
     var petKind = 'dog';
@@ -22357,6 +22446,11 @@ function interactObject(o)
             watchTv();
             return true;
         }
+        if (o.fk === 'mirror')
+        {
+            openMirror();
+            return true;
+        }
         if (o.fk === 'calendar')
         {
             showCalendar();
@@ -23505,6 +23599,54 @@ function lightPool(g, strength)
     lg.addColorStop(1, 'rgba(255,214,140,0)');
     g.fillStyle = lg;
     g.fillRect(px - 132, py - 132, 264, 264);
+}
+
+// ---------- the mirror ----------
+// Appearance used to be a one-time choice at the start; a farmer who wanted a
+// different haircut had to start over. Name, farm name and pet stay put - those
+// are identity, not appearance.
+function openMirror()
+{
+    var m = modalShell('\ud83e\ude9e \uac70\uc6b8');
+    m.body.appendChild(el('div', 'hint',
+        '\uac70\uc6b8\uc744 \ubcf4\uba70 \ubaa8\uc2b5\uc744 \ub2e4\uc2dc \uace0\ub97c \uc218 \uc788\uc5b4\uc694.\n\uc774\ub984\uacfc \ub18d\uc7a5 \uc774\ub984\uc740 \ubc14\ub00c\uc9c0 \uc54a\uc544\uc694.'));
+
+    var draft = {}, k;
+    for (k in S.look)
+    {
+        if (S.look.hasOwnProperty(k))
+        {
+            draft[k] = S.look[k];
+        }
+    }
+    buildLookEditor(m.body, draft, 'mirror');
+
+    var foot = el('div', 'modalFoot');
+    var cancel = el('button', 'btn gray', '\uadf8\ub9cc\ub450\uae30');
+    cancel.onclick = closeModal;
+    var ok = el('button', 'btn green', '\uc774\uac78\ub85c \ud560\ub798\uc694');
+    ok.onclick = function ()
+    {
+        S.look = draft;
+        // The player's frames live under 'p:me:...' and colours are not part of
+        // the bake key, so they have to be dropped by hand or the farmer on
+        // screen keeps the old face.
+        var ck;
+        for (ck in SPR_CACHE)
+        {
+            if (SPR_CACHE.hasOwnProperty(ck) && ck.indexOf('p:me:') === 0)
+            {
+                delete SPR_CACHE[ck];
+            }
+        }
+        closeModal();
+        UI.lastHudKey = '';
+        toast('\ubaa8\uc2b5\uc744 \ubc14\uafe0\uc5b4\uc694.');
+    };
+    foot.appendChild(cancel);
+    foot.appendChild(ok);
+    m.appendChild(foot);
+    openModal(m);
 }
 
 </script>
