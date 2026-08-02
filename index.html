@@ -494,6 +494,15 @@ html, body
     background: radial-gradient(circle at 35% 28%, #dff0ff, #93c4e0 62%, #4c7f9e);
 }
 
+/* Shop trade — separate from talk (btnUse). Only shown inside shop interiors. */
+#btnTrade
+{
+    left: 0;
+    bottom: 82px;
+    background: radial-gradient(circle at 35% 28%, #fff0c8, #e8c050 62%, #a87820);
+    border-color: rgba(90, 50, 10, .85);
+}
+
 .actBtn:active
 {
     transform: scale(.93);
@@ -1160,6 +1169,9 @@ textarea.fld
     <div id="actZone">
         <button class="actBtn" id="btnTool"><span class="actIco" id="btnToolIco">⛏</span></button>
         <button class="actBtn small" id="btnUse"><span class="actIco">✋</span></button>
+        <button class="actBtn small trade" id="btnTrade" style="display:none;" title="거래">
+            <span class="actIco">🛒</span>
+        </button>
     </div>
 
     <!-- overlays -->
@@ -1201,7 +1213,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2.4';
+var GAME_VER = '4.2.5';
 
 // ---------- core constants ----------
 
@@ -14956,27 +14968,7 @@ function talkTo(actor)
     {
         return;
     }
-    // Shopkeepers stand on the counter. actorNear runs before the counter
-    // interact path, so "talk" used to permanently block trading. Opening the
-    // shop is the primary action; daily friendship still counts once.
-    var shopId = shopIdForActor(actor.id);
-    if (shopId && typeof openShop === 'function')
-    {
-        if (!n.met)
-        {
-            n.met = true;
-            S.seenNpc[actor.id] = true;
-            markTalkedToday(n);
-            addFriend(actor.id, 20);
-        }
-        else if (!hasTalkedToday(n))
-        {
-            markTalkedToday(n);
-            addFriend(actor.id, 20);
-        }
-        openShop(shopId);
-        return;
-    }
+    // Trading is a separate button (btnTrade), not folded into talk.
     var fline = festivalLine(actor.id);
     if (fline && n.met)
     {
@@ -21503,14 +21495,42 @@ function fadeOut(cb)
 
 // ---------- HUD ----------
 
+// Shop id for the current interior, or null outdoors / non-shop rooms.
+function currentShopId()
+{
+    if (!MAP || !MAP.interior || !MAP.interior.shop || typeof SHOPS === 'undefined')
+    {
+        return null;
+    }
+    return SHOPS[MAP.interior.shop] ? MAP.interior.shop : null;
+}
+
+// Dedicated trade button / T key — never mixed into talkTo.
+function openTradeHere()
+{
+    if (!S || UI.modal || UI.dialogue || UI.warping)
+    {
+        return;
+    }
+    var sid = currentShopId();
+    if (!sid)
+    {
+        toast('여기서는 거래할 수 없어요.');
+        return;
+    }
+    openShop(sid);
+}
+
 function updateHud()
 {
     if (!S)
     {
         return;
     }
+    var shopKey = currentShopId() || '';
     var key = S.gold + '|' + S.time + '|' + S.day + '|' + S.season + '|' + Math.round(S.energy) +
-        '|' + S.sel + '|' + S.health + '|' + S.weather + '|' + S.goalIdx + '|' + invSig();
+        '|' + S.sel + '|' + S.health + '|' + S.weather + '|' + S.goalIdx + '|' + invSig() +
+        '|' + (MAP ? MAP.id : '') + '|' + shopKey;
     if (key === UI.lastHudKey)
     {
         return;
@@ -21537,6 +21557,13 @@ function updateHud()
     else
     {
         hw.style.display = 'none';
+    }
+
+    // 🛒 trade button only inside shop interiors (talk stays on ✋)
+    var btr = $('btnTrade');
+    if (btr)
+    {
+        btr.style.display = shopKey ? 'flex' : 'none';
     }
 
     drawClockDial();
@@ -24668,6 +24695,18 @@ function bindInput()
     bu.addEventListener('touchstart', useDown, { passive: false });
     bu.addEventListener('mousedown', useDown);
 
+    var btr = document.getElementById('btnTrade');
+    function tradeDown(e)
+    {
+        e.preventDefault();
+        openTradeHere();
+    }
+    if (btr)
+    {
+        btr.addEventListener('touchstart', tradeDown, { passive: false });
+        btr.addEventListener('mousedown', tradeDown);
+    }
+
     // tap to move on the canvas
     var wrap = document.getElementById('cvWrap');
     function tap(e)
@@ -24712,6 +24751,10 @@ function bindInput()
         if (e.key === 'e' || e.key === 'i')
         {
             openInventory();
+        }
+        if (e.key.toLowerCase() === 't')
+        {
+            openTradeHere();
         }
         if (e.key >= '1' && e.key <= '9')
         {
