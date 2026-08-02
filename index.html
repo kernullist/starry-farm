@@ -1201,7 +1201,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2.3';
+var GAME_VER = '4.2.4';
 
 // ---------- core constants ----------
 
@@ -14917,6 +14917,22 @@ function birthdayLine(d)
     return '오늘 내 생일이야! 선물 주면 정말 기쁠 텐데...\n' + pickNpcLine(d, hearts(d.id));
 }
 
+// If this villager runs the shop on the current interior map, return shop id.
+function shopIdForActor(npcId)
+{
+    if (!MAP || !MAP.interior || !MAP.interior.shop || typeof SHOPS === 'undefined')
+    {
+        return null;
+    }
+    var sid = MAP.interior.shop;
+    var sh = SHOPS[sid];
+    if (sh && sh.npc === npcId)
+    {
+        return sid;
+    }
+    return null;
+}
+
 function talkTo(actor)
 {
     var d = NPC_BY_ID[actor.id];
@@ -14938,6 +14954,27 @@ function talkTo(actor)
     }
     if (festivalTalk(actor))
     {
+        return;
+    }
+    // Shopkeepers stand on the counter. actorNear runs before the counter
+    // interact path, so "talk" used to permanently block trading. Opening the
+    // shop is the primary action; daily friendship still counts once.
+    var shopId = shopIdForActor(actor.id);
+    if (shopId && typeof openShop === 'function')
+    {
+        if (!n.met)
+        {
+            n.met = true;
+            S.seenNpc[actor.id] = true;
+            markTalkedToday(n);
+            addFriend(actor.id, 20);
+        }
+        else if (!hasTalkedToday(n))
+        {
+            markTalkedToday(n);
+            addFriend(actor.id, 20);
+        }
+        openShop(shopId);
         return;
     }
     var fline = festivalLine(actor.id);
@@ -21962,6 +21999,11 @@ function openIngredientPicker(cb)
 function openShop(shopId)
 {
     var sh = SHOPS[shopId];
+    if (!sh)
+    {
+        toast('상점을 열 수 없어요.');
+        return;
+    }
     var m = modalShell('🛒 ' + sh.name);
     var tabs = el('div', 'tabRow');
     var bodyBuy = el('div');
@@ -21986,10 +22028,12 @@ function openShop(shopId)
     function rebuildBuy()
     {
         bodyBuy.innerHTML = '';
+        var listed = 0;
         var i;
-        for (i = 0; i < sh.stock.length; i++)
+        var stockList = sh.stock || [];
+        for (i = 0; i < stockList.length; i++)
         {
-            var st = sh.stock[i];
+            var st = stockList[i];
             if (st.hide)
             {
                 continue;
@@ -22018,6 +22062,12 @@ function openShop(shopId)
                     continue;
                 }
             }
+            var it0 = ITEMS[st.id];
+            if (!it0)
+            {
+                continue;
+            }
+            listed++;
             (function (stock)
             {
                 var it = ITEMS[stock.id];
@@ -22042,6 +22092,11 @@ function openShop(shopId)
                 row.appendChild(wrap);
                 bodyBuy.appendChild(row);
             })(st);
+        }
+        if (listed === 0 && !sh.service)
+        {
+            bodyBuy.appendChild(el('div', 'hint',
+                '오늘은 진열된 상품이 없어요.\n(씨앗은 계절마다 달라집니다)'));
         }
         if (sh.service === 'upgrade')
         {
