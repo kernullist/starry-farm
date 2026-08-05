@@ -1213,7 +1213,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.2.6';
+var GAME_VER = '4.2.7';
 
 // ---------- core constants ----------
 
@@ -2826,13 +2826,22 @@ var FACE_ROWS = {
     soft: [-2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -4]
 };
 
-// Eye geometry, relative to the head. lx/rx are the eye boxes, px/pxw the
-// profile box. 'round' reproduces what was drawn before, pixel for pixel.
+// Eye geometry, relative to the head. lx/rx are the front eye boxes, px/pxw the
+// near eye of the side view and fx the far one. 'round' reproduces the front
+// view that was drawn before, pixel for pixel.
+// fx is chosen so the far eye still lands on the face at row hy + 9, where an
+// oval head on the 'b' build pulls in to x 10 - and so 'b', which takes fo, keeps
+// 2px of cheek between the two eyes, the same gap the front view leaves.
 var EYE_SPEC = {
-    round: { lx: 10, rx: 18, w: 4, h: 4, y: 7, pw: 3, ph: 3, browY: 6, bw: 4, lash: [10, 21], px: 17, pxw: 5 },
-    narrow: { lx: 10, rx: 18, w: 4, h: 3, y: 8, pw: 3, ph: 2, browY: 6, bw: 4, lash: [10, 21], px: 17, pxw: 5 },
-    wide: { lx: 9, rx: 18, w: 5, h: 4, y: 7, pw: 4, ph: 3, browY: 6, bw: 5, lash: [9, 22], px: 16, pxw: 6 }
+    round: { lx: 10, rx: 18, w: 4, h: 4, y: 7, pw: 3, ph: 3, browY: 6, bw: 4, lash: [10, 21], px: 17, pxw: 5, fx: 10 },
+    narrow: { lx: 10, rx: 18, w: 4, h: 3, y: 8, pw: 3, ph: 2, browY: 6, bw: 4, lash: [10, 21], px: 17, pxw: 5, fx: 10 },
+    wide: { lx: 9, rx: 18, w: 5, h: 4, y: 7, pw: 4, ph: 3, browY: 6, bw: 5, lash: [9, 22], px: 16, pxw: 6, fx: 9 }
 };
+
+// The far eye is 3 wide for every shape. The near eye carries the shape (5 or 6
+// wide); making the far one track it as well pushed the pair together until they
+// read as one smudge on the 'b' build.
+var FAR_EYE_W = 3;
 
 function drawFace(g, o, dir, hy, fo, fem, skin, hair, eye)
 {
@@ -2910,19 +2919,32 @@ function drawFace(g, o, dir, hy, fo, fem, skin, hair, eye)
     {
         return;
     }
+    // This is a three-quarter head, not a true profile: headSpans has no dir, so
+    // the skull keeps its symmetric front silhouette. Drawing a single eye on top
+    // of that read as "one eye is missing", not as "the head is turned" - the far
+    // half of the face was blank skin. Both eyes stay; the far one is smaller and
+    // both pupils sit against the leading edge of their white, which is what
+    // actually says the head is looking that way.
     var ex = es.px - fo;
+    var fex = es.fx + fo;
+    var fh = Math.max(2, es.h - 1);
+    pr(g, fex, hy + es.y, FAR_EYE_W, fh, '#fdfdfa');
+    pr(g, fex + 1, hy + es.y + 1, FAR_EYE_W - 1, Math.max(1, fh - 1), eye);
     pr(g, ex, hy + es.y, es.pxw, es.h, '#fdfdfa');
-    pr(g, ex + 1, hy + es.y + 1, es.pw, Math.max(1, es.h - 1), eye);
-    pr(g, ex + 1, hy + es.y + 1, 1, 1, '#ffffff');
+    pr(g, ex + 2, hy + es.y + 1, es.pw, Math.max(1, es.h - 1), eye);
+    pr(g, ex + 2, hy + es.y + 1, 1, 1, '#ffffff');
+    // no catchlight on the far eye - at 3px wide it would leave one dark pixel
+    pr(g, fex, hy + es.browY, FAR_EYE_W, 1, brow);
     pr(g, ex, hy + es.browY, es.pxw, 1, brow);
     if (fem)
     {
-        // the profile lash does not take fo - it sits off the brow, not the eye
-        pr(g, es.px - 2, hy + es.browY, 1, 1, tone(hair, -1.6));
+        // one lash off the outer corner of each eye, the same rule as the front
+        pr(g, fex - 1, hy + es.browY, 1, 1, tone(hair, -1.6));
+        pr(g, ex + es.pxw, hy + es.browY, 1, 1, tone(hair, -1.6));
     }
     pr(g, 23 - fo, hy + 8, 2, 3, skin);              // nose in profile
     pr(g, 24 - fo, hy + 9, 1, 2, tone(skin, -1.4));
-    pr(g, 9 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
+    pr(g, 10 + fo, hy + 11, 4, 2, mix(skin, '#e07a86', .3));
     if (mouth === 'small')
     {
         pr(g, 21 - fo, hy + 13, 3, 1, dark);
@@ -3048,7 +3070,15 @@ function drawGlasses(g, dir, hy, fo, skin)
         pr(g, 16 - fo, hy + 10, 7, 1, fr);
         pr(g, 17 - fo, hy + 7, 5, 3, gl);
         pr(g, 17 - fo, hy + 7, 2, 1, 'rgba(255,255,255,.55)');
-        pr(g, 12 - fo, hy + 7, 4, 1, fr);               // temple arm
+        // the side view keeps both eyes, so it needs both lenses. fx sits at 9..11
+        // depending on eye shape and build, so one box at 8 + fo covers every case.
+        pr(g, 8 + fo, hy + 6, 6, 1, fr);
+        pr(g, 8 + fo, hy + 10, 6, 1, fr);
+        pr(g, 8 + fo, hy + 6, 1, 5, fr);
+        pr(g, 13 + fo, hy + 6, 1, 5, fr);
+        pr(g, 9 + fo, hy + 7, 4, 3, gl);
+        pr(g, 14 + fo, hy + 7, 2 - fo, 1, fr);          // bridge
+        pr(g, 6 + fo, hy + 7, 2, 1, fr);                // temple arm back to the ear
     }
 }
 
@@ -3549,11 +3579,16 @@ function drawPerson(g, o, dir, frame, hold)
     // face features shift in by one on the narrow head
     var fo = fem ? 1 : 0;
     var r;
-    // ears sit behind the face spans
+    // ears sit behind the face spans. Turned sideways only the back ear is on
+    // the viewer's side - the front one sat out past the nose, which is a large
+    // part of why the side view did not read as a turned head.
     pr(g, 6 + fo, hy + 7, 3, 4, tone(skin, -.6));
-    pr(g, 23 - fo, hy + 7, 3, 4, tone(skin, -1.1));
     pr(g, 7 + fo, hy + 8, 1, 2, tone(skin, -1.8));
-    pr(g, 24 - fo, hy + 8, 1, 2, tone(skin, -1.8));
+    if (dir !== 2)
+    {
+        pr(g, 23 - fo, hy + 7, 3, 4, tone(skin, -1.1));
+        pr(g, 24 - fo, hy + 8, 1, 2, tone(skin, -1.8));
+    }
     for (r = 0; r < spans.length; r++)
     {
         pr(g, spans[r][0] + hl, hy + r, spans[r][1], 1, skin);
