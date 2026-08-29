@@ -1213,7 +1213,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.5';
+var GAME_VER = '4.6';
 
 // ---------- core constants ----------
 
@@ -2890,6 +2890,13 @@ var FACE_SHAPES = ['round', 'oval', 'soft'];
 var EYE_SHAPES = ['round', 'narrow', 'wide'];
 var MOUTHS = ['smile', 'grin', 'small'];
 var EYE_COLORS = ['#33241a', '#4a2a10', '#3a7ac0', '#3a8a50', '#5a6a72', '#6a4a90'];
+// The hair palette lives beside the eye palette and every default is taken from
+// index 0, the way EYE_COLORS already was. The new-game default used to be a
+// literal '#5a3a1a' that appeared nowhere in the picker, so the 머리색 row came
+// up with nothing highlighted and stepping back to the starting colour was
+// impossible -- there was no button for it.
+var HAIR_COLORS = ['#5a3a1a', '#3a2a1a', '#8a5a2a', '#d8a838', '#c84838',
+    '#8a5ad0', '#48b8d0', '#e8e8e8'];
 var SHOE_COLORS = ['#4a2a12', '#2a2a30', '#8a6a3a', '#a03a3a', '#e0e0e8', '#3a5a80'];
 
 // width offset per row, relative to the form's base width (16 or 14).
@@ -3899,14 +3906,32 @@ function drawHair(g, style, hair, dir, hy, skin, capped, fem)
     }
 }
 
+// The one place the person cache key is spelled. The customisation preview
+// drops its own cached frames by this prefix, and while the prefix lived as a
+// literal in two files they drifted: v4.4 bumped the bake key to invalidate the
+// old drawing and left the preview looking for the old one, so the preview
+// stopped clearing anything at all.
+var PERSON_KEY_PREFIX = 'p4:';
+
+// Every field that changes the drawing is in the key.
+//
+// Colours and hairStyle used to be left out, on the assumption that a caller
+// with a stable key (a villager id) never changes them. The customisation
+// screen breaks that assumption -- it changes the whole look under one fixed
+// key -- so it had to compensate by dropping its cached frames by prefix, and
+// that workaround is what broke. Carrying the full look costs a longer string
+// and removes the entire class of bug: nothing can be stale, whatever the
+// caller does with its key.
 function personSprite(key, opt, dir, frame, hold)
 {
     hold = !!hold;
-    return bake('p3:' + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' +
+    return bake(PERSON_KEY_PREFIX + key + ':' + (opt.tall || 0) + ':' + (opt.wide || 0) + ':' +
         (opt.form || 'a') + ':' + (opt.outfit || 'pants') + ':' +
         (opt.face || 'round') + ':' + (opt.eyes || 'round') + ':' + (opt.mouth || 'smile') + ':' +
         (opt.eye || '') + ':' + (opt.freckles ? 1 : 0) + ':' +
-        (opt.hat ? opt.hat.style + opt.hat.col : '-') + ':' + (opt.glasses ? 'g' : '') +
+        (opt.hat ? opt.hat.style + opt.hat.col : '-') + ':' + (opt.glasses ? 'g' : '') + ':' +
+        (opt.skin || '') + (opt.hair || '') + (opt.hairStyle || '') +
+        (opt.shirt || '') + (opt.pants || '') + (opt.shoe || '') +
         ':' + dir + ':' + frame + (hold ? ':h' : ''), PW, PH, function (g)
     {
         drawPerson(g, opt, dir, frame, hold);
@@ -11291,7 +11316,7 @@ function newGame(name, farmName)
         name: name || '농부',
         farmName: farmName || '별밤',
         look: {
-            skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+            skin: '#f0c8a0', hair: HAIR_COLORS[0], hairStyle: 'bowl',
             shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
             form: 'a', outfit: 'pants',
             face: 'round', eyes: 'round', mouth: 'smile', eye: '#33241a', freckles: false
@@ -13124,12 +13149,20 @@ function migrateSave(d)
             d[k] = v;
         }
     }
-    def('look', { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' });
+    def('look', { skin: '#f0c8a0', hair: HAIR_COLORS[0], hairStyle: 'bowl', shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12', form: 'a', outfit: 'pants' });
     // def() only fills a missing key, and an older save already has a look
     // object - just one without these fields. Without this an existing farmer's
     // appearance would change out from under them on load. Every default here
     // is exactly what used to be drawn.
-    var lookDef = { form: 'a', outfit: 'pants', face: 'round', eyes: 'round', mouth: 'smile', eye: '#33241a', freckles: false };
+    // Every value here is exactly the fallback drawPerson already applies for a
+    // missing field, so filling them changes nobody's appearance. It does fix
+    // the pickers: a field left undefined means the mirror shows that row with
+    // nothing highlighted, which is what the hair row looked like for everyone
+    // until v4.6. shoe was the last one still missing here.
+    var lookDef = { form: 'a', outfit: 'pants', face: 'round', eyes: 'round',
+        mouth: 'smile', eye: '#33241a', freckles: false,
+        skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+        shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12' };
     var lk;
     for (lk in lookDef)
     {
@@ -25314,6 +25347,60 @@ function assertLoaded()
                 seen[NPCS[i].look.eye] = 1;
             }
             return Object.keys(seen).length >= 4;
+        })()],
+        // Every look field must change the person bake key, or the
+        // customisation preview hands back a stale sprite for that field and
+        // the change only appears once some *other* picker happens to move the
+        // key. hairStyle and all six colours did exactly this until v4.6.
+        // Assert the wiring by baking pairs and comparing identity: if two
+        // different looks come back as the same canvas, the cache keyed them
+        // the same. Checking the key string by eye is what let this through.
+        ['look key covers every field', (function ()
+        {
+            if (typeof personSprite !== 'function' || typeof SPR_CACHE === 'undefined')
+            {
+                return false;
+            }
+            var base = { skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+                shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
+                form: 'a', outfit: 'pants', face: 'round', eyes: 'round',
+                mouth: 'smile', eye: '#33241a', freckles: false };
+            var alt = { skin: '#7a4a2a', hair: '#d8a838', hairStyle: 'pony',
+                shirt: '#c85a48', pants: '#3a6a4a', shoe: '#2a2a30',
+                form: 'b', outfit: 'dress', face: 'oval', eyes: 'narrow',
+                mouth: 'grin', eye: '#2a6ac8', freckles: true };
+            var ref = personSprite('__probe', base, 0, 0);
+            var ok = true, f;
+            for (f in alt)
+            {
+                if (!alt.hasOwnProperty(f))
+                {
+                    continue;
+                }
+                var one = {}, g2;
+                for (g2 in base)
+                {
+                    if (base.hasOwnProperty(g2))
+                    {
+                        one[g2] = base[g2];
+                    }
+                }
+                one[f] = alt[f];
+                if (personSprite('__probe', one, 0, 0) === ref)
+                {
+                    ok = false;
+                    break;
+                }
+            }
+            var k;
+            for (k in SPR_CACHE)
+            {
+                if (SPR_CACHE.hasOwnProperty(k) && k.indexOf('__probe:') > 0)
+                {
+                    delete SPR_CACHE[k];
+                }
+            }
+            return ok;
         })()]
     ];
     var missing = [], i;
@@ -25436,14 +25523,16 @@ function buildLookEditor(host, look, pk)
         var g = prev.getContext('2d');
         g.imageSmoothingEnabled = false;
         g.clearRect(0, 0, 48, 81);
-        // The bake key does not carry colours, and this preview changes in
-        // place, so drop every frame cached for it. The old code sidestepped
-        // the cache with a random key instead, which baked a new sprite on
-        // every tap and never freed one.
+        // Correctness no longer depends on this: since v4.6 the bake key
+        // carries the whole look, so a changed picker always bakes a fresh
+        // sprite. This is only housekeeping -- the preview would otherwise
+        // leave one cached frame per combination the player tried on.
+        // PERSON_KEY_PREFIX is shared with personSprite on purpose; the two
+        // spellings drifting apart is exactly what broke the preview in v4.4.
         var k;
         for (k in SPR_CACHE)
         {
-            if (SPR_CACHE.hasOwnProperty(k) && k.indexOf('p:' + pk + ':') === 0)
+            if (SPR_CACHE.hasOwnProperty(k) && k.indexOf(PERSON_KEY_PREFIX + pk + ':') === 0)
             {
                 delete SPR_CACHE[k];
             }
@@ -25547,7 +25636,7 @@ function buildLookEditor(host, look, pk)
 
     picker('성별', 'form', [['a', '남자'], ['b', '여자']]);
     picker('피부', 'skin', ['#f6dcc0', '#f0c8a0', '#d8a878', '#a87850', '#7a4a2a']);
-    picker('머리색', 'hair', ['#3a2a1a', '#8a5a2a', '#d8a838', '#c84838', '#8a5ad0', '#48b8d0', '#e8e8e8']);
+    picker('머리색', 'hair', HAIR_COLORS);
     picker('머리모양', 'hairStyle', [['bowl', '단발'], ['short', '짧게'], ['spiky', '삐죽'],
         ['bun', '올림'], ['curly', '곱슬'], ['pony', '포니'], ['wave', '웨이브'], ['long', '긴머리']]);
 
@@ -25585,7 +25674,7 @@ function askName()
 
     m.body.appendChild(el('div', 'sectionTitle', '모습'));
     var look = {
-        skin: '#f0c8a0', hair: '#5a3a1a', hairStyle: 'bowl',
+        skin: '#f0c8a0', hair: HAIR_COLORS[0], hairStyle: 'bowl',
         shirt: '#4a7ac8', pants: '#3a4a6a', shoe: '#4a2a12',
         form: 'a', outfit: 'pants',
         face: 'round', eyes: 'round', mouth: 'smile', eye: EYE_COLORS[0], freckles: false
