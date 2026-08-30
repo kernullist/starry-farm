@@ -313,13 +313,27 @@ html, body
 
 /* ---------- bottom toolbar ---------- */
 
+/* 12 slots at 44px need ~570px. Narrower than that the row used to run off
+   both edges and the outer slots were simply unreachable -- no wrap, no
+   scroll, no shrink. Wrapping keeps every slot on screen AND tappable; making
+   them small enough to fit one row on a phone would put them under 30px. */
 #toolbar
 {
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    /* Centred with auto margins, NOT left:50% + translateX(-50%). An absolutely
+       positioned shrink-to-fit box measures against the space left of its
+       containing block, so left:50% caps the available width at half the
+       screen and the row wrapped into three stubs. The transform is visual
+       only and never gets that width back. */
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: -webkit-fit-content;
+    width: fit-content;
     bottom: calc(6px + var(--safe-b));
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 3px;
     padding: 4px;
     background: rgba(74, 44, 20, .82);
@@ -402,6 +416,41 @@ html, body
 .qual.s1 { background: #c0c8d0; }
 .qual.s2 { background: #f2c14e; }
 .qual.s3 { background: #b06ddb; }
+
+/* slot hover name. Sits above the toolbar (28) and below every modal (55+). */
+#slotTip
+{
+    position: absolute;
+    z-index: 31;
+    transform: translateX(-50%);
+    max-width: 200px;
+    padding: 4px 8px 5px;
+    background: var(--panel);
+    border: 2px solid var(--wood-dark);
+    border-radius: 6px;
+    box-shadow: 0 2px 6px var(--shadow);
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.25;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .09s linear;
+}
+
+#slotTip.on
+{
+    opacity: 1;
+}
+
+#slotTip .tipSub
+{
+    margin-top: 1px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-soft);
+}
 
 /* ---------- touch controls ---------- */
 
@@ -1110,6 +1159,14 @@ textarea.fld
     image-rendering: pixelated;
 }
 
+/* narrow portrait phones: shrink slots so the 12 wrap into two rows instead of
+   three. The max-height rule below covers landscape; this one covers portrait,
+   which it never matched (812px tall). */
+@media (max-width: 520px)
+{
+    .slot { width: 38px; height: 38px; }
+}
+
 /* landscape phones / small ipads: shrink chrome a bit */
 @media (max-height: 480px)
 {
@@ -1161,6 +1218,9 @@ textarea.fld
 
     <!-- bottom item toolbar (12 slots) -->
     <div id="toolbar"></div>
+    <!-- hover name for a toolbar slot. Lives OUTSIDE #toolbar because
+         buildToolbar() replaces every child on each HUD refresh. -->
+    <div id="slotTip"></div>
 
     <!-- touch controls -->
     <div id="stickZone">
@@ -1213,7 +1273,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.6';
+var GAME_VER = '4.7.1';
 
 // ---------- core constants ----------
 
@@ -1234,6 +1294,17 @@ var BASE_HEALTH = 100;
 
 var QUALITY_MULT = [1, 1.25, 1.5, 2];
 var QUALITY_KR = ['', '은', '금', '이리듐'];
+
+// Korean label for ITEMS[].kind. Lives here next to the item table because a
+// kind with no entry renders as an empty category in the bag and in the
+// toolbar hover name -- silent, and only on the items of that one kind.
+// 'artifact' was missing for 20 items until v4.7.1; assertLoaded() now checks
+// this table against the kinds ITEMS actually uses.
+var KIND_KR = {
+    tool: '도구', seed: '씨앗', crop: '작물', forage: '채집물', fish: '물고기',
+    mineral: '광물', artisan: '가공품', cook: '요리', craft: '제작', resource: '자원',
+    animal: '축산물', hat: '모자', artifact: '유물', misc: '기타'
+};
 
 var SAVE_KEY = 'starry_farm_save_v1';
 var STATS_KEY = 'starry_farm_stats_v1';
@@ -22298,13 +22369,29 @@ var UI = {
     dialogue: null,
     dlgQueue: [],
     control: 'stick',      // stick | tap
+    mouse: 'tool',         // tool | move -- what a left click on the canvas does
     sound: true,
-    lastHudKey: ''
+    lastHudKey: '',
+    tipIdx: -1,            // toolbar slot the hover name is showing, -1 = hidden
+    tipTimer: 0,           // touch: auto-hide handle
+    tipBound: false
 };
 
 function $(id)
 {
     return document.getElementById(id);
+}
+
+// True when the primary pointer is a finger. Used only to order help text, so
+// a wrong answer costs nothing. maxTouchPoints is not enough on its own --
+// touch laptops report it while the user is holding a mouse.
+function coarsePointer()
+{
+    if (window.matchMedia)
+    {
+        return window.matchMedia('(pointer: coarse)').matches;
+    }
+    return ('ontouchstart' in window);
 }
 
 function el(tag, cls, txt)
@@ -22433,6 +22520,9 @@ function openModal(node)
     host.classList.add('on');
     $('dim').classList.add('on');
     UI.modal = node;
+    // the cursor never leaves the toolbar when a modal opens over it, so no
+    // mouseleave arrives and the hover name would hang around behind the dim
+    hideSlotTip();
     sfx('menu');
 }
 
@@ -22813,6 +22903,160 @@ function drawClockDial()
     g.fill();
 }
 
+// ---------- toolbar slot hover name ----------
+//
+// buildToolbar() throws away every slot element on each HUD refresh, and the
+// HUD key carries S.time, so the row is rebuilt at least once per clock tick
+// (SEC_PER_TICK = 7 real seconds). Per-slot listeners and CSS :hover therefore
+// die under a motionless cursor. Everything here is built so that cannot
+// happen: the tip element lives outside #toolbar, the listeners sit on the
+// container (which is never replaced), and the hovered index is kept in
+// UI.tipIdx so buildToolbar() can restore the tip after wiping its children.
+
+// KIND_KR lives in data.js, next to the item table it labels.
+
+function slotTipText(sl)
+{
+    var it = ITEMS[sl.id];
+    if (!it)
+    {
+        return null;
+    }
+    var name = it.name + (sl.q ? ' (' + QUALITY_KR[sl.q] + ')' : '');
+    if (sl.n > 1)
+    {
+        name += ' ×' + sl.n;
+    }
+    var sub = KIND_KR[it.kind] || '';
+    if (sl.id === 'can')
+    {
+        sub += (sub ? '  ·  ' : '') + '물 ' + S.water + '/' + S.waterCap;
+    }
+    else if (it.price > 0 || sl.px)
+    {
+        sub += (sub ? '  ·  ' : '') + itemPrice(sl) + 'G';
+    }
+    return { name: name, sub: sub };
+}
+
+function showSlotTip(idx)
+{
+    var tip = $('slotTip');
+    if (!tip)
+    {
+        return;
+    }
+    var sl = (S && idx >= 0) ? S.inv[idx] : null;
+    if (!sl || UI.modal || UI.dialogue)
+    {
+        hideSlotTip();
+        return;
+    }
+    var txt = slotTipText(sl);
+    if (!txt)
+    {
+        hideSlotTip();
+        return;
+    }
+    var host = $('toolbar');
+    var cell = host ? host.querySelector('[data-i="' + idx + '"]') : null;
+    if (!cell)
+    {
+        hideSlotTip();
+        return;
+    }
+    UI.tipIdx = idx;
+    tip.innerHTML = '';
+    tip.appendChild(el('div', '', txt.name));
+    if (txt.sub)
+    {
+        tip.appendChild(el('div', 'tipSub', txt.sub));
+    }
+    tip.classList.add('on');
+    // Measure after the text is in, then clamp so the box stays on screen.
+    // #app is position:fixed inset:0, so viewport coords work as-is.
+    // Horizontal anchor is the slot, vertical anchor is the whole bar: on a
+    // narrow screen the bar wraps, and a tip placed above its own slot would
+    // cover the row above it.
+    var r = cell.getBoundingClientRect();
+    var bar = host.getBoundingClientRect();
+    var half = tip.offsetWidth / 2;
+    var x = r.left + r.width / 2;
+    x = Math.max(half + 6, Math.min(window.innerWidth - half - 6, x));
+    tip.style.left = Math.round(x) + 'px';
+    tip.style.top = Math.round(bar.top - tip.offsetHeight - 6) + 'px';
+}
+
+function hideSlotTip()
+{
+    UI.tipIdx = -1;
+    if (UI.tipTimer)
+    {
+        clearTimeout(UI.tipTimer);
+        UI.tipTimer = 0;
+    }
+    var tip = $('slotTip');
+    if (tip)
+    {
+        tip.classList.remove('on');
+    }
+}
+
+// Touch has no hover, so selecting a slot flashes its name instead.
+function flashSlotTip(idx)
+{
+    if (UI.tipTimer)
+    {
+        clearTimeout(UI.tipTimer);
+    }
+    showSlotTip(idx);
+    UI.tipTimer = setTimeout(hideSlotTip, 1400);
+}
+
+function slotIndexOf(node)
+{
+    var host = $('toolbar');
+    while (node && node !== host)
+    {
+        if (node.getAttribute && node.getAttribute('data-i') !== null)
+        {
+            return parseInt(node.getAttribute('data-i'), 10);
+        }
+        node = node.parentNode;
+    }
+    return -1;
+}
+
+// Bound once, on the container. Slot elements come and go underneath it.
+function bindToolbarTips()
+{
+    var host = $('toolbar');
+    if (!host || UI.tipBound)
+    {
+        return;
+    }
+    UI.tipBound = true;
+    host.addEventListener('mousemove', function (e)
+    {
+        var idx = slotIndexOf(e.target);
+        if (idx < 0)
+        {
+            hideSlotTip();
+            return;
+        }
+        if (UI.tipTimer)
+        {
+            clearTimeout(UI.tipTimer);
+            UI.tipTimer = 0;
+        }
+        if (idx !== UI.tipIdx)
+        {
+            showSlotTip(idx);
+        }
+    });
+    host.addEventListener('mouseleave', hideSlotTip);
+}
+
 function buildToolbar()
 {
     var tb = $('toolbar');
@@ -22825,6 +23069,7 @@ function buildToolbar()
         {
             var sl = S.inv[idx];
             var d = el('div', 'slot' + (idx === S.sel ? ' sel' : ''));
+            d.setAttribute('data-i', String(idx));
             if (sl)
             {
                 var ic = itemIcon(sl.id, 32);
@@ -22855,6 +23100,8 @@ function buildToolbar()
                 S.sel = idx;
                 UI.lastHudKey = '';
                 sfx('menu');
+                // Touch has no hover; show the name for a moment on select.
+                flashSlotTip(idx);
             };
             tb.appendChild(d);
         })(i);
@@ -22863,6 +23110,13 @@ function buildToolbar()
     var sl2 = selSlot();
     var map = { hoe: '⛏', can: '💧', axe: '🪓', pick: '⛏', scythe: '🌾', rod: '🎣', sword: '⚔' };
     toolIco.textContent = sl2 ? (map[sl2.id] || '✊') : '✊';
+
+    // Every slot element above is brand new, so a tip that was showing is now
+    // anchored to a detached node. Re-point it at the fresh one.
+    if (UI.tipIdx >= 0)
+    {
+        showSlotTip(UI.tipIdx);
+    }
 }
 
 // ---------- day summary ----------
@@ -23182,10 +23436,7 @@ function itemDesc(sl)
 {
     var it = ITEMS[sl.id];
     var s = '';
-    var kindKr = { tool: '도구', seed: '씨앗', crop: '작물', forage: '채집물', fish: '물고기',
-        mineral: '광물', artisan: '가공품', cook: '요리', craft: '제작', resource: '자원',
-        animal: '축산물', hat: '모자', misc: '기타' }[it.kind] || '';
-    s += kindKr;
+    s += KIND_KR[it.kind] || '';
     if (it.price > 0 || sl.px)
     {
         s += '  ·  판매가 ' + itemPrice(sl) + 'G';
@@ -24263,10 +24514,20 @@ function openJournal()
     }
 
     // help
-    pages.help.innerHTML =
-        '<div class="sectionTitle">기본 조작</div>' +
+    // Both control schemes are complete on their own, so lead with the one
+    // this device actually has. A mouse user reading joystick instructions
+    // first has to scroll past advice that does not apply to them.
+    var helpTouch =
+        '<div class="sectionTitle">터치 (아이패드 · 폰)</div>' +
         '<div class="hint">왼쪽 조이스틱으로 이동, 오른쪽 큰 버튼(⛏)으로 도구 사용, 작은 버튼(✋)으로 말 걸기·줍기·열기.<br>' +
-        '아래 칸을 눌러 손에 들 물건을 바꿉니다.</div>' +
+        '아래 칸을 눌러 손에 들 물건을 바꿉니다 — 고를 때 그 물건의 이름이 잠깐 보입니다.</div>';
+    var helpMouse =
+        '<div class="sectionTitle">마우스 · 키보드 (컴퓨터)</div>' +
+        '<div class="hint">이동 WASD · 화살표 &nbsp;/&nbsp; <b>왼쪽 클릭 = 들고 있는 물건 사용</b>(클릭한 방향을 봅니다)<br>' +
+        '<b>오른쪽 클릭 = 말 걸기·줍기·열기</b> &nbsp;/&nbsp; 1~9, 0 키로 퀵바 선택 &nbsp;/&nbsp; E 가방 · T 서비스<br>' +
+        '퀵바 칸에 마우스를 올리면 이름이 보입니다. 클릭 동작은 ☰ 메뉴에서 바꿀 수 있어요.</div>';
+    pages.help.innerHTML =
+        (coarsePointer() ? helpTouch + helpMouse : helpMouse + helpTouch) +
         '<div class="sectionTitle">농사</div>' +
         '<div class="hint">1. 괭이로 밭을 갈고 → 2. 씨앗을 심고 → 3. 물뿌리개로 물을 주세요.<br>' +
         '매일 물을 줘야 자랍니다. 비가 오면 자동으로 물이 줍니다.<br>' +
@@ -24298,6 +24559,18 @@ function locKr(loc)
 }
 
 // ---------- settings menu ----------
+
+// UI.control was stored and never read for six versions: the menu promised
+// "the stick hides" and nothing hid it. Keep the promise in one place and
+// call it from boot() as well as from the buttons.
+function applyControlMode()
+{
+    var zone = $('stickZone');
+    if (zone)
+    {
+        zone.style.display = (UI.control === 'tap') ? 'none' : 'block';
+    }
+}
 
 function openMenu()
 {
@@ -24335,6 +24608,7 @@ function openMenu()
     {
         UI.control = 'stick';
         try { localStorage.setItem('sf_ctrl', 'stick'); } catch (e) {}
+        applyControlMode();
         closeModal();
         openMenu();
     };
@@ -24342,6 +24616,7 @@ function openMenu()
     {
         UI.control = 'tap';
         try { localStorage.setItem('sf_ctrl', 'tap'); } catch (e) {}
+        applyControlMode();
         closeModal();
         openMenu();
     };
@@ -24351,6 +24626,33 @@ function openMenu()
     m.body.appendChild(el('div', 'hint', UI.control === 'stick'
         ? '왼쪽 조이스틱으로 움직입니다. 화면을 탭해도 그쪽으로 걸어갑니다.'
         : '화면을 탭한 곳으로 걸어갑니다. 조이스틱은 숨겨집니다.'));
+
+    m.body.appendChild(el('div', 'sectionTitle', '마우스 (컴퓨터)'));
+    var mRow = el('div');
+    mRow.style.cssText = 'display:flex;gap:6px;';
+    var m1 = el('button', 'btn small' + (UI.mouse === 'tool' ? ' green' : ' gray'), '🖱 클릭 = 도구');
+    var m2 = el('button', 'btn small' + (UI.mouse === 'move' ? ' green' : ' gray'), '🖱 클릭 = 이동');
+    m1.onclick = function ()
+    {
+        UI.mouse = 'tool';
+        try { localStorage.setItem('sf_mouse', 'tool'); } catch (e) {}
+        closeModal();
+        openMenu();
+    };
+    m2.onclick = function ()
+    {
+        UI.mouse = 'move';
+        try { localStorage.setItem('sf_mouse', 'move'); } catch (e) {}
+        closeModal();
+        openMenu();
+    };
+    mRow.appendChild(m1);
+    mRow.appendChild(m2);
+    m.body.appendChild(mRow);
+    m.body.appendChild(el('div', 'hint', UI.mouse === 'tool'
+        ? '왼쪽 클릭으로 들고 있는 물건을 씁니다(클릭한 방향을 봅니다).\n오른쪽 클릭은 말 걸기·줍기·열기. 이동은 WASD 또는 화살표.'
+        : '왼쪽 클릭한 곳으로 걸어갑니다. 도구는 ⛏ 버튼이나 C 키로 씁니다.'));
+    m.body.lastChild.style.whiteSpace = 'pre-wrap';
 
     m.body.appendChild(el('div', 'sectionTitle', '소리'));
     var sb = el('button', 'btn small ' + (UI.sound ? 'green' : 'gray'), UI.sound ? '🔔 소리 켜짐' : '🔕 소리 꺼짐');
@@ -25401,6 +25703,45 @@ function assertLoaded()
                 }
             }
             return ok;
+        })()],
+        // Aim mapping must agree with facingTile(): 0 down, 1 up, 2 left,
+        // 3 right. Screen y grows downward, so this is easy to invert and the
+        // symptom (the tool hits the tile behind you) is easy to miss on a
+        // quick look. Check the values, not that the function exists.
+        ['aim direction', typeof dirToward === 'function' &&
+            dirToward(10, 0) === 3 && dirToward(-10, 0) === 2 &&
+            dirToward(0, 10) === 0 && dirToward(0, -10) === 1 &&
+            typeof aimAt === 'function'],
+        // The hover name needs its own node outside #toolbar, or it dies with
+        // the slots buildToolbar() replaces every clock tick.
+        ['slot tip', typeof showSlotTip === 'function' && typeof hideSlotTip === 'function' &&
+            typeof bindToolbarTips === 'function' &&
+            document.getElementById('slotTip') !== null &&
+            document.getElementById('slotTip').parentNode !== document.getElementById('toolbar')],
+        // UI.control sat unread for six versions while the menu claimed the
+        // stick would hide. Assert something reads it.
+        ['control mode applied', typeof applyControlMode === 'function' &&
+            document.getElementById('stickZone') !== null],
+        // A kind with no KIND_KR entry shows a blank category in the bag and in
+        // the toolbar hover name -- and only for the items of that kind, so it
+        // hides in plain sight. 'artifact' did exactly that for 20 items.
+        // Check the table against the kinds ITEMS actually uses, not its size.
+        ['KIND_KR covers every item kind', (function ()
+        {
+            if (typeof ITEMS === 'undefined' || !ITEMS ||
+                typeof KIND_KR === 'undefined' || !KIND_KR)
+            {
+                return false;
+            }
+            var id;
+            for (id in ITEMS)
+            {
+                if (ITEMS.hasOwnProperty(id) && !KIND_KR[ITEMS[id].kind])
+                {
+                    return false;
+                }
+            }
+            return true;
         })()]
     ];
     var missing = [], i;
@@ -25439,11 +25780,13 @@ function boot()
     try
     {
         UI.control = localStorage.getItem('sf_ctrl') || 'stick';
+        UI.mouse = localStorage.getItem('sf_mouse') || 'tool';
         UI.sound = localStorage.getItem('sf_snd') !== '0';
     }
     catch (e)
     {
         UI.control = 'stick';
+        UI.mouse = 'tool';
     }
 
     resize();
@@ -25454,6 +25797,8 @@ function boot()
     });
 
     bindInput();
+    bindToolbarTips();
+    applyControlMode();
     showTitle();
     animateTitle();
 
@@ -25968,7 +26313,66 @@ function bindInput()
         INPUT.tapTarget = { x: x, y: y };
     }
     wrap.addEventListener('touchstart', tap, { passive: true });
-    wrap.addEventListener('mousedown', tap);
+
+    // Mouse is a separate path from touch on purpose: touch keeps tap-to-move
+    // exactly as it was on iPad, while a mouse gets the desktop layout
+    // (left = use held item toward the cursor, right = interact).
+    function canvasMouseDown(e)
+    {
+        if (!S || UI.modal)
+        {
+            return;
+        }
+        if (UI.dialogue)
+        {
+            // any click advances the line
+            doUseAction();
+            return;
+        }
+        if (e.button === 2)
+        {
+            e.preventDefault();
+            doUseAction();
+            return;
+        }
+        if (e.button !== 0)
+        {
+            return;
+        }
+        if (UI.mouse === 'move')
+        {
+            tap(e);
+            return;
+        }
+        e.preventDefault();
+        aimAt(e.clientX, e.clientY);
+        INPUT.toolHeld = true;
+        if (FISHING.on)
+        {
+            fishingHold(true);
+            return;
+        }
+        doToolAction();
+    }
+    function canvasMouseUp()
+    {
+        if (!INPUT.toolHeld)
+        {
+            return;
+        }
+        INPUT.toolHeld = false;
+        if (FISHING.on)
+        {
+            fishingHold(false);
+        }
+    }
+    wrap.addEventListener('mousedown', canvasMouseDown);
+    // on window, so releasing outside the canvas still ends a fishing cast
+    window.addEventListener('mouseup', canvasMouseUp);
+    wrap.addEventListener('contextmenu', function (e)
+    {
+        e.preventDefault();
+    });
 
     // keyboard (desktop testing / play)
     var keys = {};
@@ -26026,6 +26430,45 @@ function bindInput()
         }
     });
     INPUT.keys = keys;
+
+    // A window that loses focus never delivers the matching keyup or mouseup,
+    // so a held key stays "down" and she walks into a wall until the next
+    // press. Alt-tab makes this easy to hit, and mouse play makes alt-tab more
+    // frequent. Drop every latched input instead of waiting for an event that
+    // is not coming.
+    function releaseAllInput()
+    {
+        var k;
+        for (k in keys)
+        {
+            if (keys.hasOwnProperty(k))
+            {
+                keys[k] = false;
+            }
+        }
+        INPUT.dx = 0;
+        INPUT.dy = 0;
+        INPUT.stickId = -1;
+        INPUT.tapTarget = null;
+        knob.style.transform = 'translate(0,0)';
+        zone.classList.remove('act');
+        if (INPUT.toolHeld)
+        {
+            INPUT.toolHeld = false;
+            if (FISHING.on)
+            {
+                fishingHold(false);
+            }
+        }
+    }
+    window.addEventListener('blur', releaseAllInput);
+    document.addEventListener('visibilitychange', function ()
+    {
+        if (document.hidden)
+        {
+            releaseAllInput();
+        }
+    });
 }
 
 function keyVector()
@@ -26223,6 +26666,35 @@ function facingTile()
         tx += 1;
     }
     return { x: tx, y: ty };
+}
+
+// Screen delta -> S.dir, in the same numbering facingTile() reads:
+// 0 = down, 1 = up, 2 = left, 3 = right. Canvas y grows downward, so a
+// positive dy is "down"; getting this backwards digs the opposite tile,
+// which is why assertLoaded() calls this directly.
+function dirToward(dx, dy)
+{
+    if (Math.abs(dx) > Math.abs(dy))
+    {
+        return dx > 0 ? 3 : 2;
+    }
+    return dy > 0 ? 0 : 1;
+}
+
+// Turn the player toward a client-space point. Same world conversion the
+// tap-to-move path uses, so aiming and walking never disagree.
+function aimAt(cx, cy)
+{
+    var wx = (cx / VIEW.scale) + CAM.x;
+    var wy = (cy / VIEW.scale) + CAM.y;
+    var dx = wx - S.px;
+    var dy = wy - S.py;
+    // clicking our own feet keeps the current facing
+    if (Math.abs(dx) < 6 && Math.abs(dy) < 6)
+    {
+        return;
+    }
+    S.dir = dirToward(dx, dy);
 }
 
 function checkWarp()
