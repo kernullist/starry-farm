@@ -1273,7 +1273,7 @@ textarea.fld
 // Starry Farm - static game data: items, crops, fish, recipes, shops, bundles.
 // All comments ASCII only.
 
-var GAME_VER = '4.12';
+var GAME_VER = '4.13';
 
 // ---------- core constants ----------
 
@@ -4624,7 +4624,7 @@ function tilePath(variant)
 function tileCave(floor, variant)
 {
     variant = variant || 0;
-    return bake('t:cave:' + floor + ':' + variant, TILE, TILE, function (g)
+    return bake('t:cave5:' + floor + ':' + variant, TILE, TILE, function (g)
     {
         // lighter than the walls so the walkable area reads at a glance
         var skull = floor >= 100;
@@ -4635,8 +4635,9 @@ function tileCave(floor, variant)
         {
             var bx = Math.floor(hash2(variant, i, 311) * TILE) - 6;
             var by = Math.floor(hash2(i, variant, 313) * TILE) - 6;
-            pe(g, bx + 9, by + 7, 10, 7, tone(base, -.9));
-            dither(g, Math.max(0, bx), Math.max(0, by), 18, 14, tone(base, -.9), base, .5);
+            // v5: no 50% dither under the blotch -- across a cave floor the
+            // checker patches read as a tiled pattern
+            pe(g, bx + 9, by + 7, 10, 7, tone(base, -.6));
         }
         crumbs(g, 0, 0, TILE, TILE, [tone(base, 1.5), tone(base, -1.5), tone(base, -2.3)], 26, floor + variant);
         // embedded pebbles
@@ -4668,51 +4669,6 @@ function tileCave(floor, variant)
         {
             pr(g, 4 + (variant % 5) * 5, 22, 8, 1, '#7a3018');
             pr(g, 5 + (variant % 5) * 5, 22, 5, 1, '#c8501e');
-        }
-    });
-}
-
-function tileCaveWall(floor, variant)
-{
-    variant = variant || 0;
-    return bake('t:cavew:' + floor + ':' + variant, TILE, TILE, function (g)
-    {
-        // skull cavern walls go much darker than the floor so the two never blend
-        var skullW = floor >= 100;
-        var base = floor < 40 ? '#4a3c2c' : (floor < 80 ? '#3a4a5c' : (skullW ? '#33212a' : '#4d2c22'));
-        pr(g, 0, 0, TILE, TILE, tone(base, -1.6));
-        // four block layouts, picked per tile so the wall does not tile visibly
-        var sets = [
-            [[0, 0, 14, 11], [14, 0, 18, 8], [0, 11, 9, 12], [9, 8, 13, 10], [22, 8, 10, 14], [0, 23, 16, 9], [16, 22, 16, 10]],
-            [[0, 0, 11, 9], [11, 0, 21, 12], [0, 9, 17, 11], [17, 12, 15, 9], [0, 20, 12, 12], [12, 21, 20, 11]],
-            [[0, 0, 19, 13], [19, 0, 13, 9], [19, 9, 13, 12], [0, 13, 10, 10], [10, 13, 9, 8], [0, 23, 19, 9], [10, 21, 9, 11]],
-            [[0, 0, 15, 8], [15, 0, 17, 14], [0, 8, 8, 13], [8, 8, 7, 12], [0, 21, 14, 11], [14, 14, 18, 8], [14, 22, 18, 10]]
-        ];
-        var blocks = sets[variant % sets.length];
-        var i;
-        for (i = 0; i < blocks.length; i++)
-        {
-            var b = blocks[i];
-            var c = tone(base, ((i + floor + variant) % 3 === 0) ? .8 : ((i + floor + variant) % 3 === 1) ? -.7 : 0);
-            pr(g, b[0] + 1, b[1] + 1, b[2] - 2, b[3] - 2, c);
-            pr(g, b[0] + 1, b[1] + 1, b[2] - 2, 2, tone(c, 1.5));
-            pr(g, b[0] + 1, b[1] + 1, 2, b[3] - 2, tone(c, 1));
-            pr(g, b[0] + 1, b[1] + b[3] - 3, b[2] - 2, 2, tone(c, -1.9));
-            pr(g, b[0] + b[2] - 3, b[1] + 1, 2, b[3] - 2, tone(c, -1.4));
-            crumbs(g, b[0] + 3, b[1] + 3, Math.max(2, b[2] - 6), Math.max(2, b[3] - 6),
-                [tone(c, -1.3), tone(c, 1.2)], 4, i * 5 + floor + variant);
-        }
-        pr(g, 0, TILE - 3, TILE, 3, tone(base, -2.4));
-        if (floor >= 80)
-        {
-            // ember rim light along the bottom edge, as if lava lies below
-            pr(g, 0, TILE - 4, TILE, 1, 'rgba(226,90,36,.5)');
-            pr(g, 0, TILE - 3, TILE, 1, 'rgba(180,60,24,.35)');
-            var ei;
-            for (ei = 0; ei < 3; ei++)
-            {
-                pr(g, ((variant * 9 + ei * 11) % (TILE - 3)), TILE - 6, 2, 2, 'rgba(255,140,60,.45)');
-            }
         }
     });
 }
@@ -10271,7 +10227,8 @@ function groundCanvas(m, season, waterFrame)
                 }
                 else if (t === T_CAVEWALL)
                 {
-                    img = tileCaveWall(m.floor || 1, Math.floor(hash2(x, y, 47) * 4));
+                    img = null;
+                    drawCaveWallTile(g, m, x, y);
                 }
                 else if (t === T_CARPET)
                 {
@@ -10803,6 +10760,42 @@ function paintRockFace(g, ox, oy, face, seed)
     }
     g.putImageData(img, ox, oy);
 }
+// v5 mine walls. tileCaveWall laid four fixed rectangle layouts per tile and
+// read as a brick cellar. The cliff's rock renderer is reused: where floor
+// lies below, the wall shows its lit face; deeper in, the same rock is the
+// dark top of the mass, so the walkable cave reads as cut into the rock.
+function drawCaveWallTile(g, m, x, y)
+{
+    var floor = m.floor || 1;
+    var skull = floor >= 100;
+    var base = floor < 40 ? '#4a3c2c' : (floor < 80 ? '#3a4a5c' : (skull ? '#33212a' : '#4d2c22'));
+    var ox = x * TILE, oy = y * TILE;
+    var below = tileAt(m, x, y + 1);
+    var face = below !== T_CAVEWALL && below !== T_VOID;
+    paintRockFace(g, ox, oy, face ? tone(base, .5) : tone(base, -1.1), x * 37 + y * 11 + floor);
+    if (face)
+    {
+        // where the wall meets the floor: a dark seam and a little rubble
+        pr(g, ox, oy + TILE - 3, TILE, 3, tone(base, -2.4));
+        pr(g, ox + (x * 7) % 20, oy + TILE - 5, 4, 2, tone(base, -.4));
+        if (tileAt(m, x, y - 1) === T_CAVEWALL)
+        {
+            // the lip where the dark mass above turns into the lit face
+            var sg = g.createLinearGradient(0, oy, 0, oy + 8);
+            sg.addColorStop(0, 'rgba(8,6,12,.55)');
+            sg.addColorStop(1, 'rgba(8,6,12,0)');
+            g.fillStyle = sg;
+            g.fillRect(ox, oy, TILE, 8);
+        }
+        if (floor >= 80)
+        {
+            // ember rim light along the bottom edge, as if lava lies below
+            pr(g, ox, oy + TILE - 4, TILE, 1, 'rgba(226,90,36,.5)');
+            pr(g, ox, oy + TILE - 3, TILE, 1, 'rgba(180,60,24,.35)');
+        }
+    }
+}
+
 function drawCliffTile(g, m, x, y, season)
 {
     var cap = season === 'winter' ? '#d4e2ee' : SEASON_TINT[season].grass;
